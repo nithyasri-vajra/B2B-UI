@@ -1,0 +1,14 @@
+# Dependencies
+node_modules/
+
+# Build output and test reports
+dist/
+coverage/
+
+# Logs
+*.log
+
+# Local environment files
+.env
+.env.*
+!.env.example
