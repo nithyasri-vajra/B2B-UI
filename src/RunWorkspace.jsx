@@ -10,14 +10,21 @@ import {
   useAction,
 } from "./AdminControls";
 import { pipeline, WorkflowLink } from "./OperatorHome";
+import { PreviewDraftResults } from "./PlanReview";
 
-export default function RunWorkspace({ data, client, run, href, action }) {
+export default function RunWorkspace({ data, client, run, href, action, navigate, preview }) {
   const [tab, setTab] = useState("Activity");
   const [answer, setAnswer] = useState("");
   const [questionId, setQuestionId] = useState("");
   const [cancel, setCancel] = useState(false);
   const [reason, setReason] = useState("");
-  const { submit, busy, feedback } = useAction(action);
+  const { submit, busy, feedback } = useAction(async (name, payload) => {
+    const result = await action(name, payload);
+    if (preview && name === "planContent" &&
+        result?.data?.runs?.some((item) => item.id === run?.id && item.status === "Awaiting Gate 1"))
+      navigate("plan", { run: run.id });
+    return result;
+  });
   const runs = client
     ? data.runs.filter((item) => item.clientId === client.id)
     : [];
@@ -54,7 +61,11 @@ export default function RunWorkspace({ data, client, run, href, action }) {
     (item) => item.clientId === client.id && item.id === run.briefId,
   );
   const questions = run.questions ?? [];
-  const canChange = !["Completed", "Cancelled", "Failed"].includes(run.status);
+  const qualification = run.qualificationResult?.qualification;
+  const planning = run.planningResult;
+  const canPlan = ["READY", "LIMITED"].includes(qualification?.verdict)
+    && (!planning?.planner || planning.planner.verdict === "BLOCKED");
+  const canChange = !run.qualificationResult && !["Completed", "Cancelled", "Failed"].includes(run.status);
   const selectedQuestion = questions.find(
     (item) => item.id === questionId && !item.answer,
   );
@@ -82,6 +93,49 @@ export default function RunWorkspace({ data, client, run, href, action }) {
       }
     >
       <a href={href("runs")}>All runs</a>
+      {run.qualificationResult && (
+        <Card title="Brief qualification">
+          {run.qualificationResult.error && <p role="alert">{run.qualificationResult.error}</p>}
+          {[
+            ["Context Assembler", run.qualificationResult.context],
+            ["Brief Qualifier", run.qualificationResult.qualification],
+          ].map(([name, stage]) => stage && (
+            <section key={name}>
+              <div className="admin-row"><h2>{name}</h2><Chip>{stage.verdict}</Chip></div>
+              <pre className="knowledge-record-content">{stage.report}</pre>
+            </section>
+          ))}
+        </Card>
+      )}
+      {(canPlan || planning) && (
+        <Card title="Content Planner">
+          {preview && (run.status === "Awaiting Gate 1" || run.gate1) && (
+            <WorkflowLink href={href("plan", { run: run.id })} gate>
+              {run.gate1 ? "View Gate 1 decision" : "Review plan at Gate 1"}
+            </WorkflowLink>
+          )}
+          {qualification?.verdict === "LIMITED" && (
+            <p>The planner will use the restrictions in the Brief Qualifier report above.</p>
+          )}
+          {canPlan && (
+            <Button primary disabled={busy} onClick={() => change("planContent")}>
+              {busy ? "Generating plan…" : "Generate content plan"}
+            </Button>
+          )}
+          {feedback}
+          {planning?.error && <p role="alert">{planning.error}</p>}
+          {[
+            ["Planning context", planning?.context],
+            ["Proposed content plan", planning?.planner],
+          ].map(([name, stage]) => stage && (
+            <details key={name} open={name === "Proposed content plan" || stage.verdict === "BLOCKED"}>
+              <summary>{name} · {stage.verdict}</summary>
+              <pre className="knowledge-record-content">{stage.report}</pre>
+            </details>
+          ))}
+        </Card>
+      )}
+      {preview && <PreviewDraftResults run={run} action={action} />}
       <div className="workflow-stages" aria-label="Run stages">
         {pipeline.map((name, i) => {
           const stage =
@@ -166,7 +220,7 @@ export default function RunWorkspace({ data, client, run, href, action }) {
           </form>
         </Card>
       )}
-      {feedback}
+      {!(canPlan || planning) && feedback}
       <div className="workflow-columns">
         <section className="card admin-card workflow-primary">
           <div className="admin-row">

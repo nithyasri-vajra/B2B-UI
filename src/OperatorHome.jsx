@@ -1,5 +1,5 @@
 import { useId, useState } from "react";
-import { Card, Chip, Page, Table } from "./AdminControls";
+import { Button, Card, Chip, Page, Table, Tabs, useAction } from "./AdminControls";
 import "./workflow.css";
 
 export const pipeline = [
@@ -35,7 +35,7 @@ const nav = [
   ["runs", "Runs"],
   ["approvals", "Approvals"],
   ["calendar", "Content calendar"],
-  ["readiness", "Knowledge"],
+  ["knowledge", "Knowledge"],
 ];
 const titles = {
   home: "W03 · Home",
@@ -45,6 +45,7 @@ const titles = {
   post: "W07 · Gate 2 — post review",
   approvals: "W08 · Approvals queue",
   calendar: "Content calendar",
+  knowledge: "Knowledge readiness",
 };
 
 export function WorkflowShell({
@@ -204,7 +205,9 @@ export function OperatorHome({ data, client, href }) {
           </div>
           <p className="muted">
             {readiness?.reason ??
-              (!readiness ? "Knowledge readiness has not been assessed." : "")}
+              (readiness?.preview && !canStartRun(readiness)
+                ? readiness.canPublish ? "Publish knowledge to start a run." : "Approve the five knowledge files to continue."
+                : !readiness ? "Knowledge readiness has not been assessed." : "")}
           </p>
         </Card>
         <Card title="Knowledge readiness">
@@ -212,11 +215,11 @@ export function OperatorHome({ data, client, href }) {
             <Chip>
               {readiness?.blocked
                 ? "Blocked"
-                : (readiness?.band ?? "Not assessed")}
+                : (readiness?.band ?? (readiness?.canStart ? "Ready" : "Not assessed"))}
             </Chip>
           </div>
           {readiness?.score != null && <p>{readiness.score} / 100</p>}
-          <a href={href("readiness")}>Open readiness</a>
+          <a href={href("knowledge")}>Open readiness</a>
         </Card>
       </div>
       <div className="admin-grid">
@@ -249,7 +252,11 @@ export function OperatorHome({ data, client, href }) {
             active.map((run) => (
               <div key={run.id} className="admin-row">
                 <strong>{run.name ?? run.period ?? run.id}</strong>
-                <Chip>{run.status}</Chip>
+                <div>
+                  <Chip>{run.status}</Chip>
+                  {run.currentStep && <p className="muted">{run.currentStep}</p>}
+                  {run.progressLabel && <p className="muted">{run.progressLabel}</p>}
+                </div>
                 <a href={href("runs", { run: run.id })}>Open run</a>
               </div>
             ))
@@ -273,26 +280,78 @@ export function OperatorHome({ data, client, href }) {
   );
 }
 
-export function ContentCalendar({ data, client, href }) {
-  const posts = client
-    ? data.posts
-        .filter((post) => post.clientId === client.id && post.scheduledAt)
-        .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt))
-    : [];
+const calendarZone = "Asia/Kolkata";
+const dateKey = new Intl.DateTimeFormat("sv-SE", { timeZone: calendarZone, dateStyle: "short" });
+const calendarTime = new Intl.DateTimeFormat("en-IN", { timeZone: calendarZone, timeStyle: "short" });
+const calendarMonth = new Intl.DateTimeFormat("en-IN", { month: "long", year: "numeric", timeZone: "UTC" });
+
+function offsetDay(day, offset) {
+  const date = new Date(day);
+  date.setUTCDate(date.getUTCDate() + offset);
+  return date;
+}
+
+export function ContentCalendar({ data, client, href, action }) {
+  const [mode, setMode] = useState("Month");
+  const [cursor, setCursor] = useState(() => new Date(dateKey.format(new Date())));
+  const { submit, busy, feedback } = useAction(action);
+  const month = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth(), 1));
+  const anchor = mode === "Month" ? month : cursor;
+  const start = offsetDay(anchor, -((anchor.getUTCDay() + 6) % 7));
+  const days = Array.from({ length: mode === "Month" ? 42 : 7 }, (_, i) => offsetDay(start, i));
+  const posts = data.posts.filter((post) => post.clientId === client?.id && Number.isFinite(Date.parse(post.scheduledAt)));
+  const tones = { Scheduled: "b", Verified: "g", Published: "g", "Published (unverified)": "g", "On hold": "a", Failed: "r", Cancelled: "r" };
+
+  function move(direction) {
+    setCursor(mode === "Month"
+      ? new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + direction, 1))
+      : offsetDay(cursor, direction * 7));
+  }
+
+  function changeSchedule(post, name, label) {
+    const reason = window.prompt(label + " this scheduled post? Enter a reason to confirm.");
+    if (reason?.trim()) submit(name, { postId: post.id, runId: post.runId, reason: reason.trim() });
+  }
+
   return (
-    <Page title="Content calendar">
+    <Page title="Content calendar" description="LinkedIn · IST">
       <Card>
-        <Table
-          headers={["Scheduled", "Post", "Status"]}
-          rows={posts.map((post) => [
-            post.scheduledAt,
-            <a href={href("post", { run: post.runId, post: post.id })}>
-              {post.title}
-            </a>,
-            <Chip>{post.status}</Chip>,
-          ])}
-          empty="No posts scheduled."
-        />
+        <div className="admin-row">
+          <Tabs values={["Month", "Week"]} value={mode} onChange={setMode} />
+          <div className="admin-actions">
+            <Button onClick={() => move(-1)}>Previous</Button>
+            <strong>{calendarMonth.format(anchor)}</strong>
+            <Button onClick={() => move(1)}>Next</Button>
+          </div>
+        </div>
+        {feedback}
+        <div className="workflow-calendar-scroll">
+          <div className="workflow-calendar">
+            {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => <strong key={day}>{day}</strong>)}
+            {days.map((day) => {
+              const key = day.toISOString().slice(0, 10);
+              return (
+                <section className="workflow-calendar-day" key={key} aria-label={key}>
+                  <time className="muted" dateTime={key}>{day.getUTCDate()}</time>
+                  {posts.filter((post) => dateKey.format(new Date(post.scheduledAt)) === key).map((post) => (
+                    <article className="workflow-calendar-post" key={post.id}>
+                      <a href={href("post", { run: post.runId, post: post.id })}>{post.title ?? "Open post"}</a>
+                      <span>{calendarTime.format(new Date(post.scheduledAt))}</span>
+                      <div><Chip tone={tones[post.status]}>{post.status}</Chip></div>
+                      {post.status === "Scheduled" && (
+                        <div className="admin-actions">
+                          <Button disabled={busy} onClick={() => changeSchedule(post, "holdPost", "Hold")}>Hold</Button>
+                          <Button disabled={busy} onClick={() => changeSchedule(post, "cancelScheduledPost", "Cancel")}>Cancel</Button>
+                        </div>
+                      )}
+                    </article>
+                  ))}
+                </section>
+              );
+            })}
+          </div>
+        </div>
+        {!posts.length && <p className="muted">No posts scheduled.</p>}
       </Card>
     </Page>
   );

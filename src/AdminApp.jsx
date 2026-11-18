@@ -26,7 +26,6 @@ const pagesByFile = {
 
 const titles = {
   overview: "W09 · Admin overview",
-  setup: "W10 · Knowledge setup wizard — step 3 upload sources",
   readiness: "W11 · Knowledge readiness dashboard",
   clients: "A2 · Clients",
   "new-client": "A2 · Create client",
@@ -60,6 +59,8 @@ export default function AdminApp({
   page = "overview",
   hrefFor = (file, targetPage) => (targetPage ? "#" + targetPage : file),
   onAction,
+  onKnowledgePublished,
+  selectedClientId,
   store,
 }) {
   const clientId = useId();
@@ -71,7 +72,7 @@ export default function AdminApp({
     source.getSnapshot,
   );
   const clients = data.clients.filter((client) => !client.archived);
-  const [selection, setSelection] = useState("");
+  const [selection, setSelection] = useState(selectedClientId ?? "");
   const [showNotifications, setShowNotifications] = useState(false);
   const client = clients.find((item) => item.id === selection) ?? clients[0];
   const notifications = data.notifications.filter(
@@ -179,7 +180,7 @@ export default function AdminApp({
         </nav>
         <div className="main">
           <header className="top">
-            <span className="wf">{titles[page]}</span>
+            {titles[page] && <span className="wf">{titles[page]}</span>}
             <div style={{ flexGrow: "1" }} />
             <label className="muted" htmlFor={clientId}>
               Client
@@ -246,6 +247,7 @@ export default function AdminApp({
                 ? page + ":" + (client?.id ?? "")
                 : page
             }
+            onPublished={() => onKnowledgePublished?.(client?.id)}
             create={page === "new-client"}
             settings={page === "client-settings"}
             showRequests={page === "requests"}

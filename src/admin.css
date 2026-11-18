@@ -279,6 +279,8 @@
 :where(.b2b-admin) .tabon{color:#1f2328;border-bottom-color:#1f2328;font-weight:600}
 :where(.b2b-admin) .step{display:flex;align-items:center;gap:8px;font-size:14px;color:#6b7280}
 :where(.b2b-admin) .dot{width:24px;height:24px;border-radius:50%;border:1px solid #c9ced6;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0}
+:where(.b2b-admin) .knowledge-upload-list{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+:where(.b2b-admin) .knowledge-upload-done{width:21px;height:21px;fill:none;stroke:#579d14;stroke-width:4.5;stroke-linecap:round;stroke-linejoin:round}
 :where(.b2b-admin) .sec{font-size:12px;color:#6b7280;padding:16px 12px 4px}
 :where(.b2b-admin) input[type=text], :where(.b2b-admin) input[type=search]{font:inherit;font-size:14px;min-height:36px;padding:0 10px;border:1px solid #c9ced6;border-radius:8px;background:#fff;box-sizing:border-box}
 :where(.b2b-admin) textarea{font:inherit;font-size:14px;border:1px solid #c9ced6;border-radius:8px;padding:10px;box-sizing:border-box}
@@ -299,3 +301,58 @@
 :where(.b2b-admin) .admin-drawer {position:fixed; inset:0 0 0 auto; z-index:2; width:min(720px,100%); box-sizing:border-box; overflow:auto; border-radius:0; box-shadow:0 4px 24px #1f232822}
 :where(.b2b-admin) .admin-extra blockquote {margin:8px 0 0; border-left:3px solid #dfe2e6; padding-left:10px}
 :where(.b2b-admin) .admin-extra .btn:disabled {opacity:.5; cursor:default}
+
+:where(.b2b-admin) .knowledge-record-drawer {
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+:where(.b2b-admin) .knowledge-record-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px clamp(16px, 4vw, 28px);
+  border-bottom: 1px solid #dfe2e6;
+}
+
+:where(.b2b-admin) .knowledge-record-header h2 {
+  font-size: 20px;
+  overflow-wrap: anywhere;
+}
+
+:where(.b2b-admin) .knowledge-record-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+:where(.b2b-admin) .knowledge-record-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px clamp(16px, 4vw, 28px) 28px;
+}
+
+:where(.b2b-admin) .knowledge-record-body > * {
+  flex-shrink: 0;
+}
+
+:where(.b2b-admin) .knowledge-record-content {
+  margin: 8px 0 0;
+  padding: 16px;
+  border: 1px solid #dfe2e6;
+  border-radius: 8px;
+  background: #f8f9fb;
+  font: inherit;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

@@ -1,6 +1,6 @@
 import { Button, Card, Chip, Page, Table, useAction } from "./AdminControls";
 
-export default function KnowledgeReadiness({ link, action, client, data }) {
+export default function KnowledgeReadiness({ link, action, client, data, readOnly, onPublished }) {
   const report = data.readiness.find((item) => item.clientId === client?.id);
   const { submit, busy, feedback } = useAction(action);
   const tone = { Green: "g", Amber: "a", Red: "r" }[report?.band];
@@ -9,31 +9,44 @@ export default function KnowledgeReadiness({ link, action, client, data }) {
   return (
     <Page
       title={"Knowledge readiness" + (client ? " · " + client.name : "")}
-      actions={
+      actions={!readOnly && (
         <>
-          <Button
+          {!report?.preview && <Button
             disabled={!client || busy}
             onClick={() => submit("recalculateReadiness")}
           >
             Recalculate
-          </Button>
+          </Button>}
           <a className="btn" {...link("RecordReview.dc.html")}>
             Open records
           </a>
           <Button
             primary
             disabled={!report?.canPublish || busy}
-            onClick={() => submit("publishKnowledge")}
+            onClick={() => submit("publishKnowledge", undefined, onPublished)}
           >
             Publish knowledge
           </Button>
         </>
-      }
+      )}
     >
       {feedback}
+      {client?.knowledge && <p>Active version · {client.knowledge}</p>}
       <div className="admin-grid">
-        <Card title="Knowledge Readiness Score">
-          {report ? (
+        <Card title={report?.preview ? "File approvals" : "Knowledge Readiness Score"}>
+          {report?.preview ? (
+            <>
+              <strong>{report.files.filter(({ approved }) => approved).length} of {report.files.length} approved</strong>
+              <p>{report.canStart ? "Ready to start a new run." : report.canPublish ? "Publish knowledge to enable Start new run." : "Review the remaining files to enable publishing."}</p>
+              <Table
+                headers={["File", "Status"]}
+                rows={report.files.map(({ name, status, approved }) => [
+                  name,
+                  <Chip tone={approved ? "g" : undefined}>{status}</Chip>,
+                ])}
+              />
+            </>
+          ) : report ? (
             <>
               <strong>{report.score ?? "—"} / 100</strong>
               <p>
@@ -48,7 +61,7 @@ export default function KnowledgeReadiness({ link, action, client, data }) {
             <p className="muted">No readiness assessment yet.</p>
           )}
         </Card>
-        <Card title="Hard gates">
+        {!report?.preview && <Card title="Hard gates">
           <Table
             headers={["Gate", "Status", ""]}
             rows={(report?.gates ?? []).map((gate) => [
@@ -56,14 +69,14 @@ export default function KnowledgeReadiness({ link, action, client, data }) {
               <Chip tone={gate.passed ? "g" : "r"}>
                 {gate.passed ? "Pass" : "Fail"}
               </Chip>,
-              !gate.passed && <a {...link("KnowledgeSetup.dc.html")}>Fix</a>,
+              !readOnly && !gate.passed && <a {...link("KnowledgeSetup.dc.html")}>Fix</a>,
             ])}
             empty="No hard gate results yet."
           />
-        </Card>
+        </Card>}
       </div>
       <div className="admin-grid">
-        <Card title="Score by domain">
+        {!report?.preview && <Card title="Score by domain">
           <Table
             headers={["Domain", "Weight", "Score"]}
             rows={(report?.domains ?? []).map((item) => [
@@ -79,14 +92,14 @@ export default function KnowledgeReadiness({ link, action, client, data }) {
             ])}
             empty="No domain scores yet."
           />
-        </Card>
+        </Card>}
         <Card title="Gaps to close">
-          <Button
-            disabled={!report?.gaps?.length || busy}
+          {!readOnly && !report?.preview && <Button
+            disabled={!report?.gaps?.length || report.preview || busy}
             onClick={() => submit("draftClientQuestions")}
           >
             Draft client questions
-          </Button>
+          </Button>}
           <Table
             headers={["Item", "Why it matters", "Owner", "Due date", "Action"]}
             rows={(report?.gaps ?? []).map((gap) => [
@@ -94,14 +107,9 @@ export default function KnowledgeReadiness({ link, action, client, data }) {
               gap.reason ?? "—",
               gap.owner ?? "—",
               gap.dueAt ?? "—",
-              <div className="admin-actions">
-                <a {...link("KnowledgeSetup.dc.html")}>Upload</a>
-                <Button
-                  disabled={busy}
-                  onClick={() => submit("askClient", { id: gap.id })}
-                >
-                  Ask client
-                </Button>
+              !readOnly && <div className="admin-actions">
+                <a {...link(gap.reason?.startsWith("Approve this file") ? "RecordReview.dc.html" : "KnowledgeSetup.dc.html")}>Fix</a>
+                {!report.preview && <Button disabled={busy} onClick={() => submit("askClient", { id: gap.id })}>Ask client</Button>}
                 {gap.allowNotApplicable && (
                   <Button
                     disabled={busy}

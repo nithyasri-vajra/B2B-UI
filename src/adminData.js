@@ -53,11 +53,11 @@ function mergeRows(key, previous, incoming) {
   return [...rows.values()];
 }
 
-export function createAdminStore(initial = {}, services = {}) {
-  let data = { ...emptyData(), ...initial };
+export function createAdminStore(initial = {}, services = {}, prepareSnapshot = (snapshot) => snapshot) {
+  let data = prepareSnapshot({ ...emptyData(), ...initial });
   const listeners = new Set();
   const publish = (next) => {
-    data = next;
+    data = prepareSnapshot(next);
     listeners.forEach((listener) => listener());
   };
   function ingest(patch) {
@@ -91,6 +91,7 @@ export function createAdminStore(initial = {}, services = {}) {
     "approvePost",
     "approvePosts",
     "holdPost",
+    "cancelScheduledPost",
     "rejectPost",
     "requestPostChanges",
     "uploadSources",

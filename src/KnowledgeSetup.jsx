@@ -1,25 +1,7 @@
-import { useRef } from "react";
-import { Button, Card, Chip, Page, Table, useAction } from "./AdminControls";
+import { useRef, useState } from "react";
+import { Button, Card, Chip, Page, useAction } from "./AdminControls";
 
-const steps = [
-  "Client profile",
-  "Channel and governance",
-  "Upload sources",
-  "Extract and review",
-  "Close gaps",
-  "Readiness score",
-  "Approve and publish",
-];
-const domains = [
-  "Brand foundation",
-  "Claims and evidence",
-  "Audience",
-  "Channel and account",
-  "Engagement governance",
-  "Market intelligence",
-  "Assets and SMEs",
-  "Practice and learning",
-];
+import { knowledgeFiles } from "./extractKnowledgeRecords";
 
 export default function KnowledgeSetup({
   link,
@@ -29,7 +11,11 @@ export default function KnowledgeSetup({
   data,
 }) {
   const picker = useRef(null);
-  const domain = useRef(null);
+  const folderPicker = useRef(null);
+  const knowledgePicker = useRef(null);
+  const selectedKnowledgeFile = useRef(null);
+  const folderUploadInProgress = useRef(false);
+  const [folderUpload, setFolderUpload] = useState(null);
   const { submit, busy, feedback } = useAction((name, payload) =>
     name === "uploadSources"
       ? onFiles(payload.files, payload.domain)
@@ -37,22 +23,96 @@ export default function KnowledgeSetup({
   );
   const uploads = data.uploads.filter((item) => item.clientId === client?.id);
   const readiness = data.readiness.find((item) => item.clientId === client?.id);
+  const isUploadingFolder = folderUpload?.active ?? false;
+  const controlsBusy = busy || isUploadingFolder;
+  const currentFolder = folderUpload?.clientId === client?.id ? folderUpload : null;
+  const fileStatuses = knowledgeFiles.map(({ name }) => {
+    const savedUpload = uploads.findLast((item) => item.name?.toLowerCase() === name);
+    const savedStatus = savedUpload?.status?.toLowerCase();
+    const uploaded = ["uploaded", "processing", "extracting", "extracted", "completed"].includes(savedStatus);
+    return currentFolder?.statuses[name] ?? (uploaded ? "Uploaded" : "Waiting");
+  });
+
+  function uploadFolder(files) {
+    if (!client || controlsBusy || folderUploadInProgress.current) return;
+
+    const selectedFiles = Array.from(files);
+    const matches = knowledgeFiles.map(({ name, domains }) => ({
+      name,
+      domain: domains[0],
+      files: selectedFiles.filter((file) => file.name.toLowerCase() === name),
+    }));
+    const missing = matches.filter((match) => !match.files.length).map(({ name }) => name);
+    const duplicates = matches.filter((match) => match.files.length > 1).map(({ name }) => name);
+    const errors = [
+      missing.length && `Missing files: ${missing.join(", ")}.`,
+      duplicates.length && `Multiple copies found: ${duplicates.join(", ")}.`,
+    ].filter(Boolean);
+    if (errors.length) {
+      setFolderUpload({ clientId: client.id, statuses: {}, errors });
+      return;
+    }
+
+    return uploadKnowledgeFiles(matches);
+  }
+
+  async function uploadKnowledgeFiles(matches) {
+    if (!client || controlsBusy || folderUploadInProgress.current) return;
+    folderUploadInProgress.current = true;
+    setFolderUpload({
+      clientId: client.id,
+      active: true,
+      statuses: {
+        ...currentFolder?.statuses,
+        ...Object.fromEntries(matches.map(({ name }) => [name, "Queued"])),
+      },
+      errors: [],
+    });
+    function setFileStatus(name, status, error) {
+      setFolderUpload((previous) => ({
+        ...previous,
+        statuses: { ...previous.statuses, [name]: status },
+        errors: error ? [...previous.errors, `${name}: ${error}`] : previous.errors,
+      }));
+    }
+
+    try {
+      for (const [index, { name, domain, files }] of matches.entries()) {
+        setFileStatus(name, "Uploading");
+        try {
+          const result = await onFiles(files, domain);
+          const failed = result?.data?.uploads?.some((item) =>
+            item.name?.toLowerCase() === name &&
+            ["failed", "error", "rejected"].includes(item.status?.toLowerCase()),
+          );
+          if (result === false || failed) {
+            throw new Error(result?.message || "Upload could not be completed.");
+          }
+          setFileStatus(name, "Uploaded");
+          if (index < matches.length - 1) {
+            // Give the sidebar time to paint even when the preview service resolves immediately.
+            await new Promise((resolve) => setTimeout(resolve, 50));
+          }
+        } catch (error) {
+          setFileStatus(name, "Failed", error?.message || "Upload could not be completed.");
+        }
+      }
+    } finally {
+      folderUploadInProgress.current = false;
+      setFolderUpload((previous) => ({ ...previous, active: false }));
+    }
+  }
 
   function upload(files, target) {
     const accepted = Array.from(files).filter(
       (file) =>
         file.type.startsWith("image/") ||
-        /\.(pdf|docx|pptx|xlsx|csv|txt|vtt|png|jpg|jpeg|webp|gif)$/i.test(
+        /\.(md|pdf|docx|pptx|xlsx|csv|txt|vtt|png|jpg|jpeg|webp|gif)$/i.test(
           file.name,
         ),
     );
-    if (accepted.length && client && !busy)
+    if (accepted.length && client && !controlsBusy && !folderUploadInProgress.current)
       submit("uploadSources", { files: accepted, domain: target });
-  }
-
-  function pick(target = null) {
-    domain.current = target;
-    picker.current.click();
   }
 
   return (
@@ -62,7 +122,7 @@ export default function KnowledgeSetup({
       actions={
         <>
           <Button
-            disabled={!client || busy}
+            disabled={!client || controlsBusy}
             onClick={() => submit("saveKnowledgeSetup")}
           >
             Save setup
@@ -74,7 +134,9 @@ export default function KnowledgeSetup({
       }
     >
       {!client && (
-        <p className="muted">Create a client to begin knowledge setup.</p>
+        <p className="muted">
+          <a {...link("#new-client")}>Create a client</a> to enable folder uploads.
+        </p>
       )}
       <div
         style={{
@@ -87,15 +149,22 @@ export default function KnowledgeSetup({
         <nav
           className="card admin-card"
           style={{ flex: "1 1 230px", maxWidth: 260 }}
-          aria-label="Setup steps"
+          aria-label="Knowledge file uploads"
         >
-          {steps.map((step, i) => (
-            <div key={step} className="step">
-              <span className="dot">{i + 1}</span>
-              {step}
-              {client?.setupSteps?.[i] && <Chip>{client.setupSteps[i]}</Chip>}
-            </div>
-          ))}
+          <ul className="knowledge-upload-list" aria-live="polite">
+            {knowledgeFiles.map(({ name }, index) => (
+              <li key={name} className="step">
+                <span className="dot">
+                  {fileStatuses[index] === "Uploaded" && (
+                    <svg className="knowledge-upload-done" viewBox="0 0 24 24" role="img" aria-label="Uploaded">
+                      <path d="M3.5 12.5l5.5 5.5L20.5 5.5" />
+                    </svg>
+                  )}
+                </span>
+                {name}
+              </li>
+            ))}
+          </ul>
         </nav>
         <section
           className="admin-card"
@@ -106,14 +175,28 @@ export default function KnowledgeSetup({
             upload(event.dataTransfer.files, null);
           }}
         >
+          <Button primary disabled={!client || controlsBusy} onClick={() => folderPicker.current.click()}>
+            Upload knowledge folder
+          </Button>
+          <input
+            ref={folderPicker}
+            hidden
+            type="file"
+            multiple
+            webkitdirectory=""
+            onChange={(event) => {
+              uploadFolder(event.currentTarget.files);
+              event.currentTarget.value = "";
+            }}
+          />
           <button
             type="button"
             className="ph"
             style={{ minHeight: 72, background: "#fff" }}
-            disabled={!client || busy}
-            onClick={() => pick()}
+            disabled={!client || controlsBusy}
+            onClick={() => picker.current.click()}
           >
-            Drop files anywhere · PDF, DOCX, PPTX, XLSX, CSV, TXT/VTT
+            Drop files anywhere · MD, PDF, DOCX, PPTX, XLSX, CSV, TXT/VTT
             transcripts, images
           </button>
           <input
@@ -121,60 +204,60 @@ export default function KnowledgeSetup({
             hidden
             type="file"
             multiple
-            accept=".pdf,.docx,.pptx,.xlsx,.csv,.txt,.vtt,image/*"
+            accept=".md,.pdf,.docx,.pptx,.xlsx,.csv,.txt,.vtt,image/*"
             onChange={(event) => {
-              upload(event.currentTarget.files, domain.current);
+              upload(event.currentTarget.files, null);
               event.currentTarget.value = "";
             }}
           />
           {feedback}
+          <input
+            ref={knowledgePicker}
+            hidden
+            type="file"
+            accept=".md"
+            onChange={(event) => {
+              const [file] = event.currentTarget.files;
+              event.currentTarget.value = "";
+              if (!file) return;
+              const { name, domains } = selectedKnowledgeFile.current;
+              if (file.name.toLowerCase() !== name) {
+                setFolderUpload({ clientId: client.id, statuses: currentFolder?.statuses ?? {}, errors: [`Select ${name} for this card.`] });
+                return;
+              }
+              uploadKnowledgeFiles([{ name, domain: domains[0], files: [file] }]);
+            }}
+          />
+          {!!currentFolder?.errors.length && (
+            <ul role="alert">
+              {currentFolder.errors.map((error) => <li key={error}>{error}</li>)}
+            </ul>
+          )}
           <div className="admin-grid">
-            {domains.map((name, i) => {
-              const key = "D" + (i + 1);
-              const items =
-                readiness?.domains?.find((item) => item.id === key)?.items ??
-                [];
+            {knowledgeFiles.map(({ name, domains }) => {
+              const items = domains.flatMap(
+                (id) => readiness?.domains?.find((item) => item.id === id)?.items ?? [],
+              );
               return (
-                <Card key={key} title={key + " " + name}>
-                  {items.length ? (
-                    items.map((item) => (
+                <Card key={name} title={name}>
+                  {items.map((item) => (
                       <p key={item.id}>
                         {item.level} · {item.name} <Chip>{item.status}</Chip>
                       </p>
-                    ))
-                  ) : (
-                    <p className="muted">No checklist items yet.</p>
-                  )}
-                  <Button disabled={!client || busy} onClick={() => pick(key)}>
-                    Upload to {key}
+                  ))}
+                  <Button
+                    disabled={!client || controlsBusy}
+                    onClick={() => {
+                      selectedKnowledgeFile.current = { name, domains };
+                      knowledgePicker.current.click();
+                    }}
+                  >
+                    Upload {name}
                   </Button>
-                  {key === "D6" && (
-                    <Button
-                      disabled={!client || busy}
-                      onClick={() => submit("runMarketResearch")}
-                    >
-                      Run market research
-                    </Button>
-                  )}
                 </Card>
               );
             })}
           </div>
-          <Card title="Recent uploads">
-            <Table
-              headers={["File", "Domain", "Status", "Records"]}
-              rows={uploads.map((item) => [
-                item.name,
-                item.domain ?? "—",
-                <Chip>
-                  {item.status ?? "—"}
-                  {item.progress != null && " · " + item.progress + "%"}
-                </Chip>,
-                item.recordCount ?? "—",
-              ])}
-              empty="No sources uploaded yet."
-            />
-          </Card>
         </section>
       </div>
     </Page>

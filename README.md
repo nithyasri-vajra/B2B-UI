@@ -61,3 +61,27 @@ Register services with createAdminStore(initialData, services). Return {data, me
 - Plan review: editPlanItem, approvePlan, rejectPlan. The decision payload contains the selected item IDs and versions. The backend must check ownership, permissions, current versions and whether an additional Approver is needed.
 - Post review: commentOnPost, requestProfileConnection, approvePost, approvePosts, requestPostChanges, holdPost, rejectPost. Approval requires current version, scheduled time, connected test profile and backend step-up. The UI sends the exact values and blocks stale confirmations. The backend must recheck them, enforce client and run scope, and reject unsafe or conflicting decisions before returning approved results.
 - Drive pipeline transitions, QA, scheduling, publication checks, audit and notifications from the backend. Add the returned run, plan, post, task, approval and audit updates through data responses or store.ingest() as they arrive. A frontend button alone does not launch background work.
+
+## Local Excel brief validation
+
+The Vite dev and preview servers use Python 3 with openpyxl to read uploaded
+briefs. Install it with python -m pip install openpyxl. Set B2B_PYTHON if the
+interpreter is not available as python. Production deployments should supply
+their own validateBrief, saveRunDraft, and startRun services.
+
+## Local skill execution
+
+The preview's Run Social Media Agent action runs only Context Assembler and
+Brief Qualifier. Set OPENAI_API_KEY, B2B_CONTEXT_SKILL_ID,
+B2B_CONTEXT_SKILL_VERSION, B2B_QUALIFIER_SKILL_ID, and
+B2B_QUALIFIER_SKILL_VERSION in the environment of the Vite process and restart
+it. OPENAI_MODEL optionally overrides the model. Keep these values server-side.
+The selected brief and approved knowledge are sent to the configured OpenAI
+project when you start a run. Results are stored in the local preview and shown
+under Runs. An assembler verdict of BLOCKED stops the second call.
+
+For planning, upload the Content Planner skill to the same OpenAI project.
+Set B2B_PLANNER_SKILL_ID and B2B_PLANNER_SKILL_VERSION in the same Vite
+terminal and restart it. Open an existing Ready or Limited qualification and
+select Generate content plan. The preview assembles a planner-specific context
+and keeps the resulting proposal on that run for human review.

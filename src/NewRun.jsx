@@ -2,16 +2,27 @@ import { useRef, useState } from "react";
 import { Button, Card, Chip, Page, Table, useAction } from "./AdminControls";
 import { canStartRun } from "./OperatorHome";
 
-export default function NewRun({ data, client, run, href, navigate, action }) {
+export default function NewRun({ data, client, run, href, navigate, action, preview }) {
   const input = useRef(null);
-  const [briefId, setBriefId] = useState(null);
-  const [fileName, setFileName] = useState("");
+  const [briefId, setBriefId] = useState(() => preview && !run
+    ? data.briefs.findLast((brief) => brief.clientId === client?.id && brief.validated)?.id ?? null
+    : null);
+  const [fileName, setFileName] = useState(() => data.briefs.find((brief) => brief.id === briefId)?.name ?? "");
   const [fileError, setFileError] = useState("");
+  const [openFeedback, setOpenFeedback] = useState("");
   const [confirmReplace, setConfirmReplace] = useState(false);
   const result = useRef(null);
   const { submit, busy, feedback } = useAction(async (name, payload) => {
-    result.current = await action(name, payload);
-    return result.current;
+    try {
+      result.current = await action(name, payload);
+      return result.current;
+    } catch (error) {
+      if (name !== "validateBrief") throw error;
+      setFileError(error.message === "Connect this action to the app service before using it."
+        ? "Excel validation isn’t connected in this preview."
+        : error.message || "The brief could not be validated.");
+      return false;
+    }
   });
   const readiness = data.readiness.find((item) => item.clientId === client?.id);
   const brief = data.briefs.find(
@@ -42,6 +53,8 @@ export default function NewRun({ data, client, run, href, navigate, action }) {
 
   function save(name) {
     const payload = { briefId, runId: run?.id };
+    if (preview && name === "startRun" && openFeedback.trim())
+      payload.openFeedback = openFeedback.trim();
     submit(name, payload, () => {
       const id =
         result.current?.runId ?? result.current?.data?.runs?.[0]?.id ?? run?.id;
@@ -127,7 +140,9 @@ export default function NewRun({ data, client, run, href, navigate, action }) {
                   ? "Brief passed validation."
                   : busy
                     ? "Checking brief…"
-                    : "Choose a file to validate."}
+                    : fileName
+                      ? "Brief validation is required before you can start."
+                      : "Choose a file to validate."}
               </p>
             )}
             <h2>What we read from the brief</h2>
@@ -142,6 +157,18 @@ export default function NewRun({ data, client, run, href, navigate, action }) {
           </Card>
         </div>
         <Card title="2 · Pre-run check">
+          {preview && !run && (
+            <label className="admin-field">
+              Open feedback for this period (optional if documented)
+              <textarea
+                value={openFeedback}
+                onChange={(event) => setOpenFeedback(event.target.value)}
+                placeholder="List current open feedback, or enter No open feedback if confirmed."
+                maxLength={4000}
+                rows={3}
+              />
+            </label>
+          )}
           <Table
             headers={["Check", "Result"]}
             rows={[
@@ -153,7 +180,7 @@ export default function NewRun({ data, client, run, href, navigate, action }) {
                 "Readiness",
                 readiness?.blocked
                   ? "Blocked"
-                  : (readiness?.band ?? "Not assessed"),
+                  : (readiness?.band ?? (canStartRun(readiness) ? "Ready" : "Not assessed")),
               ],
               [
                 "Approver / backup",
@@ -180,7 +207,7 @@ export default function NewRun({ data, client, run, href, navigate, action }) {
             <>
               <Button
                 primary
-                disabled={!ready || busy}
+                disabled={!ready || busy || preview}
                 onClick={() => setConfirmReplace(true)}
               >
                 Replace and restart
@@ -209,7 +236,7 @@ export default function NewRun({ data, client, run, href, navigate, action }) {
           ) : (
             <div className="admin-actions">
               <Button
-                disabled={!ready || busy}
+                disabled={!ready || busy || preview}
                 onClick={() => save("saveRunDraft")}
               >
                 Save as draft
@@ -223,6 +250,8 @@ export default function NewRun({ data, client, run, href, navigate, action }) {
               </Button>
             </div>
           )}
+          {preview && ready && <p className="muted">This preview runs Context Assembler and Brief Qualifier.</p>}
+          {busy && ready && <p role="status">Running the skills. Keep this page open.</p>}
           {feedback}
         </Card>
       </div>

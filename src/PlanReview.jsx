@@ -32,7 +32,99 @@ export function ReviewDialog({ title, onClose, children }) {
   );
 }
 
-export default function PlanReview({ data, client, run, href, action }) {
+export function PreviewDraftResults({ run, action }) {
+  const { submit, busy, feedback } = useAction(action);
+  if (run.gate1?.decision !== "Approved") return null;
+  const result = run.draftingResult;
+  return (
+    <Card title="Drafting and quality review">
+      {result?.running && <p role="status">Generating drafts and running quality checks…</p>}
+      {result?.error && <p role="alert">{result.error}</p>}
+      {(!result || result.error) && (
+        <Button primary disabled={busy} onClick={() => submit("retryPreviewDraft", { runId: run.id })}>
+          {result?.error ? "Retry drafting" : "Start drafting"}
+        </Button>
+      )}
+      {[
+        ["Writing context", result?.context],
+        ["Post Writer drafts", result?.writer],
+        ["Quality review context", result?.qaContext],
+        ["Post Quality Analyst", result?.qa],
+      ].map(([name, stage]) => stage && (
+        <details key={name} open={name === "Post Writer drafts" || name === "Post Quality Analyst" || stage.verdict === "BLOCKED"}>
+          <summary>{name} · {stage.verdict}</summary>
+          <pre className="knowledge-record-content">{stage.report}</pre>
+        </details>
+      ))}
+      {feedback}
+    </Card>
+  );
+}
+
+function PreviewPlanReview({ run, href, action }) {
+  const [decision, setDecision] = useState("");
+  const [reason, setReason] = useState("");
+  const { submit, busy, feedback } = useAction(action);
+  const plan = run.planningResult.planner;
+  const pending = run.status === "Awaiting Gate 1";
+
+  return (
+    <Page
+      title="Gate 1 · Approve content plan"
+      description={run.period}
+      actions={<WorkflowLink href={href("runs", { run: run.id })}>Back to run</WorkflowLink>}
+    >
+      <Card title="Proposed content plan">
+        <Chip>{run.gate1?.decision ?? "Awaiting approval"}</Chip>
+        {run.gate1?.reason && <p>{run.gate1.reason}</p>}
+        <pre className="knowledge-record-content">{plan.report}</pre>
+        {pending && (
+          <div className="admin-actions">
+            <Button primary onClick={() => setDecision("Approved")}>Approve for drafting</Button>
+            <Button onClick={() => setDecision("Rejected")}>Reject plan</Button>
+          </div>
+        )}
+        {!decision && feedback}
+      </Card>
+      <PreviewDraftResults run={run} action={action} />
+      {pending && decision && (
+        <ReviewDialog
+          title={decision === "Approved" ? "Approve this plan for drafting?" : "Reject this plan?"}
+          onClose={() => { if (!busy) setDecision(""); }}
+        >
+          <form className="workflow-form" onSubmit={(event) => {
+            event.preventDefault();
+            submit("decidePreviewPlan", { runId: run.id, report: plan.report, decision, reason }, () => setDecision(""));
+          }}>
+            {decision === "Approved" ? (
+              <p>This approval covers drafting. Publishing requires a separate approval.</p>
+            ) : (
+              <Field label="Reason">
+                <textarea required rows={3} value={reason} onChange={(event) => setReason(event.target.value)} />
+              </Field>
+            )}
+            {feedback}
+            <div className="admin-actions">
+              <Button primary type="submit" disabled={busy || (decision === "Rejected" && !reason.trim())}>
+                {decision === "Approved" ? "Confirm approval" : "Confirm rejection"}
+              </Button>
+              <Button disabled={busy} onClick={() => setDecision("")}>Cancel</Button>
+            </div>
+          </form>
+        </ReviewDialog>
+      )}
+    </Page>
+  );
+}
+
+export default function PlanReview(props) {
+  const { run, preview } = props;
+  if (preview && ["Awaiting Gate 1", "Plan approved", "Plan rejected"].includes(run?.status))
+    return <PreviewPlanReview {...props} />;
+  return <PlanItemReview {...props} />;
+}
+
+function PlanItemReview({ data, client, run, href, action }) {
   const [view, setView] = useState("Table");
   const [selected, setSelected] = useState([]);
   const [requiresApprover, setRequiresApprover] = useState(false);
