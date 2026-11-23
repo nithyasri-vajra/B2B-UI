@@ -32,7 +32,7 @@ export function ReviewDialog({ title, onClose, children }) {
   );
 }
 
-export function PreviewDraftResults({ run, action }) {
+export function PreviewDraftResults({ run, action, renderStage }) {
   const { submit, busy, feedback } = useAction(action);
   if (run.gate1?.decision !== "Approved") return null;
   const result = run.draftingResult;
@@ -50,12 +50,12 @@ export function PreviewDraftResults({ run, action }) {
         ["Post Writer drafts", result?.writer],
         ["Quality review context", result?.qaContext],
         ["Post Quality Analyst", result?.qa],
-      ].map(([name, stage]) => stage && (
+      ].map(([name, stage]) => stage && (renderStage ? renderStage(name, stage) : (
         <details key={name} open={name === "Post Writer drafts" || name === "Post Quality Analyst" || stage.verdict === "BLOCKED"}>
           <summary>{name} · {stage.verdict}</summary>
           <pre className="knowledge-record-content">{stage.report}</pre>
         </details>
-      ))}
+      )))}
       {feedback}
     </Card>
   );

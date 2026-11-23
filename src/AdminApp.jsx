@@ -24,20 +24,6 @@ const pagesByFile = {
   "AuditLog.dc.html": "audit",
 };
 
-const titles = {
-  overview: "W09 · Admin overview",
-  readiness: "W11 · Knowledge readiness dashboard",
-  clients: "A2 · Clients",
-  "new-client": "A2 · Create client",
-  "client-settings": "A2 · Client settings",
-  records: "W12 · Knowledge records and review",
-  users: "W14 · Users and roles",
-  requests: "W14 · Access requests",
-  agents: "W13 · Agents and skills",
-  integrations: "A8 · Integrations",
-  audit: "W16 · Audit log",
-};
-
 const screens = {
   overview: AdminOverview,
   setup: KnowledgeSetup,
@@ -180,7 +166,6 @@ export default function AdminApp({
         </nav>
         <div className="main">
           <header className="top">
-            {titles[page] && <span className="wf">{titles[page]}</span>}
             <div style={{ flexGrow: "1" }} />
             <label className="muted" htmlFor={clientId}>
               Client

@@ -1,6 +1,9 @@
 # B2B Agents admin UI
 
-Extract the project and run npm ci, then npm run dev. Run npm run build for production.
+With Node.js and npm installed, run `npm start` from the project folder for
+first-time setup. It installs the dependencies from `package-lock.json` and
+starts the dev server. Use `npm run dev` when dependencies are already installed.
+Run `npm run build` for production.
 
 ## Merge with the earlier sections
 
@@ -64,24 +67,35 @@ Register services with createAdminStore(initialData, services). Return {data, me
 
 ## Local Excel brief validation
 
-The Vite dev and preview servers use Python 3 with openpyxl to read uploaded
-briefs. Install it with python -m pip install openpyxl. Set B2B_PYTHON if the
-interpreter is not available as python. Production deployments should supply
-their own validateBrief, saveRunDraft, and startRun services.
+The standalone preview validates uploaded `.xlsx` files in the browser.
+It uses the selected client's name and channel and reports workbook issues
+beside the uploaded brief. Production deployments should supply their own
+validateBrief, saveRunDraft, and startRun services.
 
-## Local skill execution
+## Running published skills
 
-The preview's Run Social Media Agent action runs only Context Assembler and
-Brief Qualifier. Set OPENAI_API_KEY, B2B_CONTEXT_SKILL_ID,
-B2B_CONTEXT_SKILL_VERSION, B2B_QUALIFIER_SKILL_ID, and
-B2B_QUALIFIER_SKILL_VERSION in the environment of the Vite process and restart
-it. OPENAI_MODEL optionally overrides the model. Keep these values server-side.
+Run `npm start` from the UI project folder to open the standalone preview.
+An operator who needs live skill execution configures the server with an
+OpenAI API key and the IDs and versions of already published skills. For
+local previews, copy `.env.example` to `.env.local` and set those values.
+The preview references the published skills directly. Keep the API key on
+the server and restart the preview after changing its configuration.
+
+The preview's initial run action runs Context Assembler and Brief Qualifier.
+Set OPENAI_API_KEY, B2B_CONTEXT_SKILL_ID, B2B_CONTEXT_SKILL_VERSION,
+B2B_QUALIFIER_SKILL_ID, and B2B_QUALIFIER_SKILL_VERSION in the Vite server
+environment or a local `.env.local` file and restart it. OPENAI_MODEL optionally
+overrides the model. Keep these values server-side.
 The selected brief and approved knowledge are sent to the configured OpenAI
 project when you start a run. Results are stored in the local preview and shown
 under Runs. An assembler verdict of BLOCKED stops the second call.
 
-For planning, upload the Content Planner skill to the same OpenAI project.
-Set B2B_PLANNER_SKILL_ID and B2B_PLANNER_SKILL_VERSION in the same Vite
-terminal and restart it. Open an existing Ready or Limited qualification and
+For planning, configure the Content Planner skill in the same OpenAI project.
+Open an existing Ready or Limited qualification and
 select Generate content plan. The preview assembles a planner-specific context
 and keeps the resulting proposal on that run for human review.
+
+For a shared deployment, connect the UI to the host app's authenticated
+workflow services. Configure the key and skill references on that backend
+once, so end users can open the app URL. The GitHub Pages deployment serves
+the static UI and needs a separate backend for live workflow execution.

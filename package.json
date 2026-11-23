@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prestart": "npm ci",
+    "start": "npm run dev",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"

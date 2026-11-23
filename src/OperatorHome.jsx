@@ -13,6 +13,10 @@ export const pipeline = [
   "Publication check",
 ];
 
+export function configuredAgent(data, agentId) {
+  return agentId ? data.agents?.find((agent) => agent.id === agentId) : undefined;
+}
+
 export function canStartRun(report) {
   if (
     !report ||
@@ -37,17 +41,6 @@ const nav = [
   ["calendar", "Content calendar"],
   ["knowledge", "Knowledge"],
 ];
-const titles = {
-  home: "W03 · Home",
-  "new-run": "W04 · New run — attach brief",
-  runs: "W05 · Run workspace",
-  plan: "W06 · Gate 1 — content plan review",
-  post: "W07 · Gate 2 — post review",
-  approvals: "W08 · Approvals queue",
-  calendar: "Content calendar",
-  knowledge: "Knowledge readiness",
-};
-
 export function WorkflowShell({
   page,
   data,
@@ -95,7 +88,6 @@ export function WorkflowShell({
         </nav>
         <div className="main">
           <header className="top">
-            <span className="wf">{titles[page]}</span>
             <div style={{ flexGrow: 1 }} />
             <label className="muted" htmlFor={clientId}>
               Client
@@ -177,6 +169,7 @@ export function OperatorHome({ data, client, href }) {
     .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
   return (
     <Page
+      className="workflow-setup-page"
       title={data.session?.name ? "Good morning, " + data.session.name : "Home"}
       description={
         client
@@ -185,8 +178,7 @@ export function OperatorHome({ data, client, href }) {
       }
     >
       <div className="workflow-home-grid">
-        <Card title="Social Media Agent — LinkedIn">
-          <p className="muted">{pipeline.slice(0, -1).join(" → ")}</p>
+        <Card title={configuredAgent(data, client?.agentId)?.name ?? "Agent workflows"}>
           <div className="admin-actions">
             {client && canStartRun(readiness) ? (
               <WorkflowLink href={href("new-run")} primary>

@@ -9,21 +9,55 @@ import {
   Tabs,
   useAction,
 } from "./AdminControls";
-import { pipeline, WorkflowLink } from "./OperatorHome";
+import { configuredAgent, pipeline, WorkflowLink } from "./OperatorHome";
 import { PreviewDraftResults } from "./PlanReview";
+import SkillResult from "./SkillResult";
 
-export default function RunWorkspace({ data, client, run, href, action, navigate, preview }) {
+function RunPipeline({ run, agent, planning }) {
+  const qualification = run.qualificationResult;
+  const plan = run.planningResult;
+  const drafts = run.draftingResult;
+  const names = agent?.pipeline?.length ? agent.pipeline.map(({ name }) => name) : pipeline;
+  const outcome = (stage) => ({ BLOCKED: "Blocked", LIMITED: "Limited", REVISE: "Needs revision", READY: "Done", PASS: "Done" })[stage?.verdict];
+  const statuses = [
+    qualification?.error ? "Failed" : outcome(qualification?.qualification ?? qualification?.context),
+    planning ? "Running" : plan?.error ? "Failed" : outcome(plan?.planner ?? plan?.context),
+    run.gate1?.decision ?? (run.status === "Awaiting Gate 1" ? "Awaiting review" : undefined),
+    outcome(drafts?.writer) ?? (drafts?.running ? "Running" : undefined),
+    outcome(drafts?.qa ?? (drafts?.qaContext?.verdict === "BLOCKED" ? drafts.qaContext : null)),
+  ];
+  const tones = { Done: "g", Approved: "g", Verified: "g", Blocked: "r", Failed: "r", Rejected: "r", Limited: "a", "Needs revision": "a", "Awaiting review": "b", Running: "b" };
+  return (
+    <ol className="run-pipeline" aria-label="Run stages">
+      {names.map((name, index) => {
+        const stage = run.stages?.find((item) => item.name?.toLowerCase() === name.toLowerCase());
+        const status = stage?.status ?? (names === pipeline ? statuses[index] : undefined) ?? "Pending";
+        return (
+          <li className="card" key={name}>
+            <strong>{name}</strong>
+            <Chip tone={tones[status]}>{status}</Chip>
+            {stage?.duration && <span className="muted">{stage.duration}</span>}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+export default function RunWorkspace({ data, client, run, href, action, preview }) {
   const [tab, setTab] = useState("Activity");
   const [answer, setAnswer] = useState("");
   const [questionId, setQuestionId] = useState("");
   const [cancel, setCancel] = useState(false);
   const [reason, setReason] = useState("");
+  const [planningRunId, setPlanningRunId] = useState(null);
   const { submit, busy, feedback } = useAction(async (name, payload) => {
-    const result = await action(name, payload);
-    if (preview && name === "planContent" &&
-        result?.data?.runs?.some((item) => item.id === run?.id && item.status === "Awaiting Gate 1"))
-      navigate("plan", { run: run.id });
-    return result;
+    if (name === "planContent") setPlanningRunId(payload.runId);
+    try {
+      return await action(name, payload);
+    } finally {
+      if (name === "planContent") setPlanningRunId(null);
+    }
   });
   const runs = client
     ? data.runs.filter((item) => item.clientId === client.id)
@@ -63,6 +97,11 @@ export default function RunWorkspace({ data, client, run, href, action, navigate
   const questions = run.questions ?? [];
   const qualification = run.qualificationResult?.qualification;
   const planning = run.planningResult;
+  const agent = configuredAgent(data, run.agentId);
+  const planningNow = planningRunId === run.id;
+  const showPipeline = planningNow || Boolean(planning || run.gate1 || run.stages?.some(
+    (stage, index) => index > 0 && stage.status && stage.status !== "Pending",
+  ));
   const canPlan = ["READY", "LIMITED"].includes(qualification?.verdict)
     && (!planning?.planner || planning.planner.verdict === "BLOCKED");
   const canChange = !run.qualificationResult && !["Completed", "Cancelled", "Failed"].includes(run.status);
@@ -76,7 +115,7 @@ export default function RunWorkspace({ data, client, run, href, action, navigate
 
   return (
     <Page
-      title={run.name ?? "LinkedIn · " + (run.period ?? run.id)}
+      title={run.name ?? [agent?.name ?? "Agent run", run.period ?? run.id].join(" / ")}
       description={[run.owner, run.startedAt].filter(Boolean).join(" · ")}
       actions={
         <>
@@ -93,6 +132,7 @@ export default function RunWorkspace({ data, client, run, href, action, navigate
       }
     >
       <a href={href("runs")}>All runs</a>
+      {showPipeline && <RunPipeline run={run} agent={agent} planning={planningNow} />}
       {run.qualificationResult && (
         <Card title="Brief qualification">
           {run.qualificationResult.error && <p role="alert">{run.qualificationResult.error}</p>}
@@ -100,10 +140,7 @@ export default function RunWorkspace({ data, client, run, href, action, navigate
             ["Context Assembler", run.qualificationResult.context],
             ["Brief Qualifier", run.qualificationResult.qualification],
           ].map(([name, stage]) => stage && (
-            <section key={name}>
-              <div className="admin-row"><h2>{name}</h2><Chip>{stage.verdict}</Chip></div>
-              <pre className="knowledge-record-content">{stage.report}</pre>
-            </section>
+            <SkillResult key={name} name={name} stage={stage} />
           ))}
         </Card>
       )}
@@ -128,37 +165,11 @@ export default function RunWorkspace({ data, client, run, href, action, navigate
             ["Planning context", planning?.context],
             ["Proposed content plan", planning?.planner],
           ].map(([name, stage]) => stage && (
-            <details key={name} open={name === "Proposed content plan" || stage.verdict === "BLOCKED"}>
-              <summary>{name} · {stage.verdict}</summary>
-              <pre className="knowledge-record-content">{stage.report}</pre>
-            </details>
+            <SkillResult key={name} name={name} stage={stage} />
           ))}
         </Card>
       )}
-      {preview && <PreviewDraftResults run={run} action={action} />}
-      <div className="workflow-stages" aria-label="Run stages">
-        {pipeline.map((name, i) => {
-          const stage =
-            run.stages?.find((item) => item.name === name) ?? run.stages?.[i];
-          return (
-            <div className="st" key={name}>
-              <strong>{name}</strong>
-              <Chip
-                tone={
-                  stage?.status === "Done"
-                    ? "g"
-                    : stage?.status === "Blocked"
-                      ? "r"
-                      : undefined
-                }
-              >
-                {stage?.status ?? "Pending"}
-              </Chip>
-              {stage?.duration && <span>{stage.duration}</span>}
-            </div>
-          );
-        })}
-      </div>
+      {preview && <PreviewDraftResults run={run} action={action} renderStage={(name, stage) => <SkillResult key={name} name={name} stage={stage} />} />}
       {run.blocker && (
         <section className="card admin-card workflow-notice" role="status">
           <h2>{run.blocker.title ?? "Run blocked"}</h2>

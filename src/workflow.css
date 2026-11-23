@@ -65,10 +65,144 @@
   width: 100%;
   cursor: pointer;
 }
+:where(.b2b-admin) .body.workflow-setup-page {
+  padding-block: 28px;
+  gap: 20px;
+}
+:where(.b2b-admin) .new-run-steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px clamp(12px, 2vw, 28px);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+:where(.b2b-admin) .new-run-steps .step {
+  gap: 8px;
+}
+:where(.b2b-admin) .new-run-steps .step + .step::before {
+  content: "";
+  width: clamp(12px, 3vw, 40px);
+  height: 1px;
+  margin-right: clamp(4px, 1.5vw, 20px);
+  background: #c9ced6;
+}
+:where(.b2b-admin) .new-run-steps .dot {
+  width: 28px;
+  height: 28px;
+}
+:where(.b2b-admin) .new-run-steps [data-reached="true"] {
+  color: #1f2328;
+  font-weight: 600;
+}
+:where(.b2b-admin) .new-run-steps [data-reached="true"] .dot {
+  color: #fff;
+  background: #1f2328;
+  border-color: #1f2328;
+}
+:where(.b2b-admin) .new-run-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 20px;
+}
+:where(.b2b-admin) .new-run-setup {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}
+:where(.b2b-admin) .new-run-setup > .card {
+  gap: 16px;
+}
+:where(.b2b-admin) .new-run-setup .workflow-drop {
+  align-self: stretch;
+  min-height: 88px;
+}
+:where(.b2b-admin) .new-run-validation-status,
+:where(.b2b-admin) .new-run-validation-readiness {
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #f3f4f6;
+  font-size: 13px;
+  line-height: 1.45;
+}
+:where(.b2b-admin) .new-run-validation-readiness {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  background: #fff7e5;
+}
+:where(.b2b-admin) .new-run-validation-feedback > span {
+  font-weight: 600;
+}
+:where(.b2b-admin) .new-run-validation-feedback .muted {
+  font-weight: 400;
+}
+:where(.b2b-admin) .new-run-validation-feedback textarea {
+  width: 100%;
+  font-size: 13px;
+  resize: vertical;
+}
+:where(.b2b-admin) .new-run-validation-actions {
+  display: grid;
+  gap: 10px;
+}
+:where(.b2b-admin) .new-run-brief-details {
+  height: clamp(260px, 55vh, 520px);
+  overflow: auto;
+}
+:where(.b2b-admin) .new-run-brief-details .admin-table {
+  overflow: visible;
+}
+:where(.b2b-admin) .new-run-brief-details td {
+  overflow-wrap: anywhere;
+}
+@media (min-width: 1050px) {
+  :where(.b2b-admin) .new-run-layout {
+    grid-template-columns: minmax(300px, 1fr) minmax(0, 2fr);
+  }
+}
 :where(.b2b-admin) .workflow-stages {
   display: flex;
   gap: 8px;
   overflow: auto;
+}
+:where(.b2b-admin) .run-pipeline {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 125px), 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+:where(.b2b-admin) .run-pipeline > li {
+  display: grid;
+  justify-items: start;
+  align-content: start;
+  gap: 6px;
+  padding: 10px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+:where(.b2b-admin) .run-skill-result {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #dfe2e6;
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+:where(.b2b-admin) .run-skill-result h3,
+:where(.b2b-admin) .run-skill-result h4,
+:where(.b2b-admin) .run-skill-result ul {
+  margin: 0;
+}
+:where(.b2b-admin) .run-skill-reason {
+  padding: 8px 10px;
+  background: #fff7e5;
+  border-radius: 6px;
 }
 :where(.b2b-admin) .workflow-preview {
   border: 1px solid #dfe2e6;

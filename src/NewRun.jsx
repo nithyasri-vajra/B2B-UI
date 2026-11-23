@@ -1,8 +1,11 @@
 import { useRef, useState } from "react";
 import { Button, Card, Chip, Page, Table, useAction } from "./AdminControls";
-import { canStartRun } from "./OperatorHome";
+import { canStartRun, configuredAgent } from "./OperatorHome";
+import periodBriefTemplate from "./period-brief-template.xlsx?url";
 
 export default function NewRun({ data, client, run, href, navigate, action, preview }) {
+  const agent = configuredAgent(data, run ? run.agentId : client?.agentId);
+  const templateUrl = agent?.briefTemplateUrl ?? data.integrations.briefTemplateUrl ?? periodBriefTemplate;
   const input = useRef(null);
   const [briefId, setBriefId] = useState(() => preview && !run
     ? data.briefs.findLast((brief) => brief.clientId === client?.id && brief.validated)?.id ?? null
@@ -33,6 +36,7 @@ export default function NewRun({ data, client, run, href, navigate, action, prev
   const ready =
     brief?.validated === true &&
     !issues.some((issue) => issue.severity === "Error");
+  const currentStep = ready && !blocked ? 2 : fileName ? 1 : 0;
 
   function pick(file) {
     if (!file || busy || !client) return;
@@ -53,6 +57,7 @@ export default function NewRun({ data, client, run, href, navigate, action, prev
 
   function save(name) {
     const payload = { briefId, runId: run?.id };
+    if (agent && name !== "replaceBrief") payload.agentId = agent.id;
     if (preview && name === "startRun" && openFeedback.trim())
       payload.openFeedback = openFeedback.trim();
     submit(name, payload, () => {
@@ -64,19 +69,30 @@ export default function NewRun({ data, client, run, href, navigate, action, prev
 
   return (
     <Page
-      title={run ? "Replace period brief" : "Social Media Agent — new run"}
-      description={["Attach brief", "Check", "Run"]
-        .map((stage, i) => i + 1 + " " + stage)
-        .join(" → ")}
+      className="workflow-setup-page"
+      title={run ? "Replace period brief" : agent?.name ?? "New agent run"}
+      actions={
+        <a className="btn" href={templateUrl} download={templateUrl === periodBriefTemplate ? "period-brief-template.xlsx" : true}>
+          Download period brief template (.xlsx)
+        </a>
+      }
     >
-      <div className="workflow-columns">
-        <div className="workflow-primary admin-card">
+      <ol className="new-run-steps" aria-label="Run setup steps">
+        {["Attach brief", "Check", "Run"].map((label, index) => (
+          <li
+            key={label}
+            className="step"
+            aria-current={index === currentStep ? "step" : undefined}
+            data-reached={index <= currentStep}
+          >
+            <span className="dot" aria-hidden="true">{index + 1}</span>
+            {label}
+          </li>
+        ))}
+      </ol>
+      <div className="new-run-layout">
+        <div className="new-run-setup">
           <Card title="1 · Period brief (session context)">
-            {data.integrations.briefTemplateUrl && (
-              <a href={data.integrations.briefTemplateUrl} download>
-                Download template
-              </a>
-            )}
             <button
               className="ph workflow-drop"
               type="button"
@@ -122,8 +138,9 @@ export default function NewRun({ data, client, run, href, navigate, action, prev
                 </div>
               </div>
             )}
+          </Card>
+          <Card title="Validation">
             {fileError && <p role="alert">{fileError}</p>}
-            <h2>Validation</h2>
             {issues.length ? (
               issues.map((issue, i) => (
                 <div key={i}>
@@ -135,124 +152,111 @@ export default function NewRun({ data, client, run, href, navigate, action, prev
                 </div>
               ))
             ) : (
-              <p className="muted">
+              <p className="new-run-validation-status" role="status">
                 {ready
                   ? "Brief passed validation."
                   : busy
                     ? "Checking brief…"
                     : fileName
                       ? "Brief validation is required before you can start."
-                      : "Choose a file to validate."}
+                      : "Upload an Excel brief to check it."}
               </p>
             )}
-            <h2>What we read from the brief</h2>
+            {preview && !run && (
+              <label className="admin-field new-run-validation-feedback">
+                <span>Period feedback <span className="muted">(optional)</span></span>
+                <textarea
+                  value={openFeedback}
+                  onChange={(event) => setOpenFeedback(event.target.value)}
+                  placeholder="Add open feedback or enter No open feedback if confirmed."
+                  maxLength={4000}
+                  rows={2}
+                />
+              </label>
+            )}
+            {blocked && (
+              <div className="new-run-validation-readiness">
+                <strong>Readiness check required</strong>
+                <p>
+                {readiness?.reason ??
+                  "Complete the readiness check before running the agent."}
+                </p>
+                <a href={href("readiness")}>Open readiness</a>
+              </div>
+            )}
+            {readiness?.limitations?.map((item) => (
+              <p key={item} className="muted">
+                {item}
+              </p>
+            ))}
+            {run ? (
+              <>
+                <Button
+                  primary
+                  disabled={!ready || busy || preview}
+                  onClick={() => setConfirmReplace(true)}
+                >
+                  Replace and restart
+                </Button>
+                {confirmReplace && (
+                  <div className="card workflow-notice">
+                    <p>
+                      Replacing this brief invalidates existing approvals and
+                      restarts brief qualification.
+                    </p>
+                    <div className="admin-actions">
+                      <Button
+                        primary
+                        disabled={busy}
+                        onClick={() => save("replaceBrief")}
+                      >
+                        Confirm replacement
+                      </Button>
+                      <Button onClick={() => setConfirmReplace(false)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="new-run-validation-actions">
+                <Button
+                  disabled={!ready || busy || preview}
+                  onClick={() => save("saveRunDraft")}
+                >
+                  Save as draft
+                </Button>
+                <Button
+                  primary
+                  disabled={blocked || !ready || busy}
+                  onClick={() => save("startRun")}
+                >
+                  {agent?.name ? "Run " + agent.name : "Run agent"}
+                </Button>
+              </div>
+            )}
+            {preview && ready && <p className="muted">This preview runs Context Assembler and Brief Qualifier.</p>}
+            {busy && ready && <p role="status">Running the skills. Keep this page open.</p>}
+            {feedback}
+          </Card>
+        </div>
+        <Card title="What we read from the brief">
+          <div
+            className="new-run-brief-details"
+            role="region"
+            aria-label="Brief details table"
+            tabIndex={0}
+          >
             <Table
               headers={["Field", "Value"]}
               rows={Object.entries(brief?.fields ?? {}).map(([key, value]) => [
                 key,
-                Array.isArray(value) ? value.join(", ") : String(value ?? "—"),
+                Array.isArray(value) ? value.join(", ") : String(value ?? "-"),
               ])}
               empty="No brief details to display."
             />
-          </Card>
-        </div>
-        <Card title="2 · Pre-run check">
-          {preview && !run && (
-            <label className="admin-field">
-              Open feedback for this period (optional if documented)
-              <textarea
-                value={openFeedback}
-                onChange={(event) => setOpenFeedback(event.target.value)}
-                placeholder="List current open feedback, or enter No open feedback if confirmed."
-                maxLength={4000}
-                rows={3}
-              />
-            </label>
-          )}
-          <Table
-            headers={["Check", "Result"]}
-            rows={[
-              ["Client", client?.name ?? "—"],
-              ["Channel", "LinkedIn"],
-              ["Period", brief?.period ?? "—"],
-              ["Knowledge version", client?.knowledge ?? "—"],
-              [
-                "Readiness",
-                readiness?.blocked
-                  ? "Blocked"
-                  : (readiness?.band ?? (canStartRun(readiness) ? "Ready" : "Not assessed")),
-              ],
-              [
-                "Approver / backup",
-                [client?.approver, client?.backup]
-                  .filter(Boolean)
-                  .join(" / ") || "—",
-              ],
-              ["Posts requested", brief?.postCount ?? "—"],
-            ]}
-          />
-          {blocked && (
-            <p className="muted">
-              {readiness?.reason ??
-                "A readiness assessment is required before starting."}{" "}
-              <a href={href("readiness")}>Open readiness</a>
-            </p>
-          )}
-          {readiness?.limitations?.map((item) => (
-            <p key={item} className="muted">
-              {item}
-            </p>
-          ))}
-          {run ? (
-            <>
-              <Button
-                primary
-                disabled={!ready || busy || preview}
-                onClick={() => setConfirmReplace(true)}
-              >
-                Replace and restart
-              </Button>
-              {confirmReplace && (
-                <div className="card workflow-notice">
-                  <p>
-                    Replacing this brief invalidates existing approvals and
-                    restarts brief qualification.
-                  </p>
-                  <div className="admin-actions">
-                    <Button
-                      primary
-                      disabled={busy}
-                      onClick={() => save("replaceBrief")}
-                    >
-                      Confirm replacement
-                    </Button>
-                    <Button onClick={() => setConfirmReplace(false)}>
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="admin-actions">
-              <Button
-                disabled={!ready || busy || preview}
-                onClick={() => save("saveRunDraft")}
-              >
-                Save as draft
-              </Button>
-              <Button
-                primary
-                disabled={blocked || !ready || busy}
-                onClick={() => save("startRun")}
-              >
-                Run Social Media Agent
-              </Button>
-            </div>
-          )}
-          {preview && ready && <p className="muted">This preview runs Context Assembler and Brief Qualifier.</p>}
-          {busy && ready && <p role="status">Running the skills. Keep this page open.</p>}
-          {feedback}
+          </div>
         </Card>
       </div>
     </Page>

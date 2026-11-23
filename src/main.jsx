@@ -8,6 +8,7 @@ import { restorePreviewStore } from "./previewStorage";
 import { ContentCalendar, OperatorHome, WorkflowShell } from "./OperatorHome";
 import SignIn from "./SignIn";
 import NewRun from "./NewRun";
+import { validateBrief } from "./validateBrief";
 import RunWorkspace from "./RunWorkspace";
 import PlanReview from "./PlanReview";
 import PostReview from "./PostReview";
@@ -202,7 +203,9 @@ if (mount) {
     return {
       client: client.name.replace(/ \(Preview\)$/, ""),
       project: "Social Media Agent",
-      channel: "LinkedIn",
+      channel: client.channel || Object.entries(brief.fields).find(
+        ([name]) => name.trim().toLowerCase() === "channel",
+      )?.[1],
       knowledgeVersion: client.knowledge,
       knowledge,
       ...(openFeedback && { openFeedback: { status: openFeedback, period: brief.period, source: "User-provided run input" } }),
@@ -211,12 +214,19 @@ if (mount) {
   }
 
   async function requestRunStage(path, input) {
-    const response = await fetch(path, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input),
-    });
-    const result = await response.json();
+    let response;
+    let result;
+    try {
+      response = await fetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      result = await response.json();
+    } catch (error) {
+      console.error("Workflow request failed:", path, error);
+      throw new Error("Could not connect to the workflow service. Please try again.");
+    }
     if (!response.ok) throw new Error(result.message ?? "The run stage could not start.");
     return result;
   }
@@ -239,7 +249,7 @@ if (mount) {
   }
 
   const previewStore = createAdminStore({
-    clients: [{ id: "vajra-preview", name: "Vajra Global (Preview)" }],
+    clients: [{ id: "vajra-preview", name: "Vajra Global (Preview)", channel: "LinkedIn" }],
   }, {
     decidePreviewPlan({ clientId, runId, report, decision, reason }) {
       const run = previewStore.getSnapshot().runs.find((item) => item.id === runId && item.clientId === clientId);
@@ -271,14 +281,7 @@ if (mount) {
     async validateBrief({ clientId, file }) {
       const client = previewStore.getSnapshot().clients.find(({ id }) => id === clientId);
       if (!client) throw new Error("Select a client.");
-      const query = new URLSearchParams({ client: client.name.replace(/ \(Preview\)$/, "") });
-      const response = await fetch("/__preview/validate-brief?" + query, {
-        method: "POST",
-        headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
-        body: file,
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.message);
+      const result = await validateBrief(file, client);
       const brief = { ...result, id: crypto.randomUUID(), clientId, name: file.name };
       return { data: { briefs: [brief] } };
     },
@@ -298,7 +301,7 @@ if (mount) {
         : "Awaiting Gate 1";
       return { data: { runs: [{ ...run, status, planningResult: result, planGeneratedAt: new Date().toISOString() }] } };
     },
-    async startRun({ clientId, briefId, openFeedback }) {
+    async startRun({ clientId, briefId, openFeedback, agentId }) {
       const input = getRunInput(clientId, briefId, openFeedback);
       const startedAt = new Date().toISOString();
       const result = await requestRunStage("/__preview/start-run", input);
@@ -307,6 +310,7 @@ if (mount) {
         id: crypto.randomUUID(),
         clientId,
         briefId,
+        ...(agentId && { agentId }),
         period: input.brief.period,
         knowledgeVersion: input.knowledgeVersion,
         startedAt,

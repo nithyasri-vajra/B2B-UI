@@ -13,7 +13,7 @@ export default function SignIn({ data, action }) {
   return (
     <main className="workflow-auth">
       <p className="wf">
-        W01–W02 · Sign-in states · SSO only
+        SSO only
         {data.integrations.google?.domain &&
           ", @" + data.integrations.google.domain}
       </p>

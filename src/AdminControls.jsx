@@ -1,8 +1,8 @@
 import { useState } from "react";
 
-export function Page({ title, description, actions, children }) {
+export function Page({ title, description, actions, children, className = "" }) {
   return (
-    <main className="body admin-extra">
+    <main className={`body admin-extra ${className}`.trim()}>
       <div className="admin-row">
         <div>
           <h1>{title}</h1>
