@@ -66,7 +66,7 @@ const userClients = (user, clients) =>
     ? clients
     : clients.filter((client) => user.assignments?.[client]?.length);
 
-function EditAccess({ user, clients, clientName, action, onClose, onSave, liveAccess, clientsLoadError }) {
+function EditAccess({ user, clients, clientName, action, onClose, onSave, clientsLoadError }) {
   const [draft, setDraft] = useState({
     ...user,
     assignments: user.assignments ?? {},
@@ -86,7 +86,7 @@ function EditAccess({ user, clients, clientName, action, onClose, onSave, liveAc
   });
   const effectiveRoles = userRoles(draft);
   const globalChanged = Boolean(draft.global) !== Boolean(user.global);
-  const needsConfirmation = globalChanged || (liveAccess && (draft.global || user.global));
+
 
   function selectRole(role, checked) {
     setRoleOptions((current) =>
@@ -154,9 +154,9 @@ function EditAccess({ user, clients, clientName, action, onClose, onSave, liveAc
               <span className="muted">{descriptions[i]}</span>
             </label>
           ))}
-          {(liveAccess || globalChanged) && (
+          {globalChanged && (
             <>
-              <Field label="Reason for access change">
+              <Field label="Reason for changing Platform Admin access">
                 <textarea
                   required
                   maxLength={2000}
@@ -164,7 +164,7 @@ function EditAccess({ user, clients, clientName, action, onClose, onSave, liveAc
                   onChange={(e) => setReason(e.target.value)}
                 />
               </Field>
-              {needsConfirmation && <label>
+              <label>
                 <input
                   type="checkbox"
                   required
@@ -172,7 +172,7 @@ function EditAccess({ user, clients, clientName, action, onClose, onSave, liveAc
                   onChange={(e) => setConfirmed(e.target.checked)}
                 />{" "}
                 Confirm Platform Admin access change
-              </label>}
+              </label>
             </>
           )}
         </Card>
@@ -240,8 +240,7 @@ function EditAccess({ user, clients, clientName, action, onClose, onSave, liveAc
             type="submit"
             disabled={
               busy || accessSaved || Boolean(clientsError) ||
-              (needsConfirmation && !confirmed) ||
-              ((liveAccess || globalChanged) && !reason.trim()) ||
+              (globalChanged && (!confirmed || !reason.trim())) ||
               (user.status === "Pending role" && !effectiveRoles.length)
             }
           >
@@ -315,7 +314,6 @@ export function Users({
         clients={clients}
         clientName={clientName}
         action={action}
-        liveAccess={data.liveAccess}
         clientsLoadError={data.clientsLoadError && !availableClients.length ? data.clientsLoadError : null}
         onClose={() => setEditing(null)}
         onSave={() => setEditing(null)}
