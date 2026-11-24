@@ -162,6 +162,15 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
         confirmPlatformAdmin: confirmed === true,
       });
     },
+    async preAddUser({ email }) {
+      return changeAccess({ action: "pre_add", email });
+    },
+    async suspendUser({ email }) {
+      return changeAccess({ action: "suspend", email });
+    },
+    async removeUserFromClient({ email, client }) {
+      return changeAccess({ action: "remove_client", email, clientId: client });
+    },
     async declineAccessRequest({ email, reason }) {
       return changeAccess({ action: "decline", email, reason });
     },
