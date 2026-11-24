@@ -52,6 +52,13 @@ function navigate(page, parameters) {
   window.location.hash = workflowHref(page, parameters);
 }
 
+function followAuthRedirect(redirectUrl) {
+  const target = new URL(redirectUrl, window.location.origin);
+  if (target.protocol !== "https:" && target.origin !== window.location.origin)
+    throw new Error("Invalid sign-in redirect.");
+  window.location.assign(target.href);
+}
+
 export function B2BAgents({
   store,
   requireSignIn = true,
@@ -116,15 +123,7 @@ export function B2BAgents({
       clientId: client?.id,
       ...payload,
     });
-    if (result?.redirectUrl) {
-      const target = new URL(result.redirectUrl, window.location.origin);
-      if (
-        target.protocol !== "https:" &&
-        target.origin !== window.location.origin
-      )
-        throw new Error("Invalid sign-in redirect.");
-      window.location.assign(target.href);
-    }
+    if (result?.redirectUrl) followAuthRedirect(result.redirectUrl);
     if (name === "signOut" && result !== false) navigate("sign-in");
     return result;
   }, [store, client?.id]);
@@ -144,6 +143,7 @@ export function B2BAgents({
     return (
       <AdminApp
         page={page}
+        onRedirect={followAuthRedirect}
         selectedClientId={params.get("client") ?? selection}
         store={store}
         onKnowledgePublished={(clientId) => navigate("home", { client: clientId })}

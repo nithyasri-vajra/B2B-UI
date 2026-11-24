@@ -1,4 +1,4 @@
-import { useId, useState, useSyncExternalStore } from "react";
+import { useCallback, useId, useState, useSyncExternalStore } from "react";
 import AdminOverview from "./AdminOverview";
 import KnowledgeSetup from "./KnowledgeSetup";
 import KnowledgeReadiness from "./KnowledgeReadiness";
@@ -45,6 +45,7 @@ export default function AdminApp({
   page = "overview",
   hrefFor = (file, targetPage) => (targetPage ? "#" + targetPage : file),
   onAction,
+  onRedirect,
   onKnowledgePublished,
   selectedClientId,
   store,
@@ -65,16 +66,17 @@ export default function AdminApp({
     (item) => !item.clientId || item.clientId === client?.id,
   );
 
-  async function action(name, payload) {
+  const action = useCallback(async (name, payload) => {
     const scoped = { clientId: client?.id, ...payload };
     const result = await onAction?.(
       name,
       payload === undefined ? undefined : scoped,
     );
     if (result?.data) source.ingest(result.data);
-    if (result !== undefined) return result;
-    return source.dispatch(name, scoped);
-  }
+    const outcome = result === undefined ? await source.dispatch(name, scoped) : result;
+    if (outcome?.redirectUrl) onRedirect?.(outcome.redirectUrl);
+    return outcome;
+  }, [source, client?.id, onAction, onRedirect]);
   const Screen = screens[page] ?? AdminOverview;
   const activeNav =
     {
