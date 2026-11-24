@@ -71,7 +71,6 @@ function EditAccess({ user, clients, clientName, action, onClose, onSave, client
     ...user,
     assignments: user.assignments ?? {},
   });
-  const [roleOptions, setRoleOptions] = useState(userRoles(user));
   const [reason, setReason] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [clientsError, setClientsError] = useState(clientsLoadError);
@@ -88,23 +87,6 @@ function EditAccess({ user, clients, clientName, action, onClose, onSave, client
   const globalChanged = Boolean(draft.global) !== Boolean(user.global);
 
 
-  function selectRole(role, checked) {
-    setRoleOptions((current) =>
-      checked ? [...current, role] : current.filter((item) => item !== role),
-    );
-    if (role === roles[0])
-      setDraft((current) => ({ ...current, global: checked }));
-    else if (!checked)
-      setDraft((current) => ({
-        ...current,
-        assignments: Object.fromEntries(
-          Object.entries(current.assignments).map(([client, assigned]) => [
-            client,
-            assigned.filter((item) => item !== role),
-          ]),
-        ),
-      }));
-  }
   function assign(client, role, checked) {
     const assigned = draft.assignments[client] ?? [];
     setDraft({
@@ -131,29 +113,55 @@ function EditAccess({ user, clients, clientName, action, onClose, onSave, client
 
   return (
     <Page
-      title={"Edit user access · " + user.name}
-      description={
-        user.email +
-        " · Google Workspace · " +
-        user.status +
-        " · Last sign-in " +
-        user.last
-      }
+      title={(user.status === "Pending role" ? "Assign access · " : "Edit access · ") + user.name}
+      description={[user.email, user.status, user.last && "Last sign-in " + user.last].filter(Boolean).join(" · ")}
       actions={<Button onClick={onClose}>Back</Button>}
     >
       <form className="admin-form" onSubmit={save}>
-        <Card title="Roles">
-          {roles.map((role, i) => (
-            <label key={role}>
-              <input
-                type="checkbox"
-                checked={roleOptions.includes(role)}
-                onChange={(e) => selectRole(role, e.target.checked)}
-              />{" "}
-              <strong>{role}</strong>{" "}
-              <span className="muted">{descriptions[i]}</span>
-            </label>
-          ))}
+        {user.note && <Card title="Request note"><p>{user.note}</p></Card>}
+        <Card title="Client roles">
+          <p className="muted">Select a role for each client this user should access.</p>
+          {clientsError && (
+            <div>
+              <p role="alert">{clientsError}</p>
+              <Button type="button" disabled={busy} onClick={() =>
+                submit("loadClients", {}, () => setClientsError(null))
+              }>
+                Retry loading clients
+              </Button>
+            </div>
+          )}
+          <Table
+            empty="No clients available to assign."
+            headers={["Client", ...roles.slice(1)]}
+            rows={clients.map((client) => [
+              clientName(client),
+              ...roles
+                .slice(1)
+                .map((role) => (
+                  <input
+                    aria-label={clientName(client) + " " + role}
+                    type="checkbox"
+                    disabled={busy || accessSaved}
+                    checked={draft.assignments[client]?.includes(role) ?? false}
+                    onChange={(e) => assign(client, role, e.target.checked)}
+                  />
+                )),
+            ])}
+          />
+        </Card>
+        <Card title="Platform access">
+          <label>
+            <input type="checkbox" checked={Boolean(draft.global)}
+              disabled={busy || accessSaved}
+              onChange={(event) => {
+                setDraft({ ...draft, global: event.target.checked });
+                setConfirmed(false);
+              }}
+            />{" "}
+            <strong>Platform Admin</strong>{" "}
+            <span className="muted">{descriptions[0]}</span>
+          </label>
           {globalChanged && (
             <>
               <Field label="Reason for changing Platform Admin access">
@@ -176,36 +184,7 @@ function EditAccess({ user, clients, clientName, action, onClose, onSave, client
             </>
           )}
         </Card>
-        <Card title="Client assignments">
-          {clientsError && (
-            <div>
-              <p role="alert">{clientsError}</p>
-              <Button type="button" disabled={busy} onClick={() =>
-                submit("loadClients", {}, () => setClientsError(null))
-              }>
-                Retry loading clients
-              </Button>
-            </div>
-          )}
-          <Table
-            headers={["Client", ...roles.slice(1)]}
-            rows={clients.map((client) => [
-              clientName(client),
-              ...roles
-                .slice(1)
-                .map((role) => (
-                  <input
-                    aria-label={clientName(client) + " " + role}
-                    type="checkbox"
-                    disabled={!roleOptions.includes(role)}
-                    checked={draft.assignments[client]?.includes(role) ?? false}
-                    onChange={(e) => assign(client, role, e.target.checked)}
-                  />
-                )),
-            ])}
-          />
-        </Card>
-        <Card title="Effective permissions">
+        <Card title="Access summary">
           <ul>
             {effectiveRoles.length ? (
               effectiveRoles.map((role) => (
@@ -225,13 +204,6 @@ function EditAccess({ user, clients, clientName, action, onClose, onSave, client
             ) : (
               <li>No effective access.</li>
             )}
-            {!effectiveRoles.includes("Approver") && (
-              <li>Cannot approve posts for publishing.</li>
-            )}
-            {!draft.global && (
-              <li>Cannot manage users or agent configuration.</li>
-            )}
-            <li>Cannot view skill files or prompts.</li>
           </ul>
         </Card>
         <div className="admin-actions">
@@ -244,7 +216,7 @@ function EditAccess({ user, clients, clientName, action, onClose, onSave, client
               (user.status === "Pending role" && !effectiveRoles.length)
             }
           >
-            Re-authenticate and save
+            {busy ? "Saving…" : "Save access"}
           </Button>
           <Button onClick={onClose}>Cancel</Button>
         </div>
