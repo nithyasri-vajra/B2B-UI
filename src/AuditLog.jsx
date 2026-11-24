@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Card, Field, Page, Select, Table } from "./AdminControls";
 
 const headers = [
@@ -55,7 +55,21 @@ function exportCSV(entries) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export function AuditLog({ data }) {
+export function AuditLog({ data, action }) {
+  const [loadError, setLoadError] = useState("");
+  const [loading, setLoading] = useState(Boolean(data.liveAccess));
+  useEffect(() => {
+    if (!data.liveAccess) return;
+    let current = true;
+    setLoading(true);
+    setLoadError("");
+    action("loadAudit").catch((error) => {
+      if (current) setLoadError(error.message);
+    }).finally(() => {
+      if (current) setLoading(false);
+    });
+    return () => { current = false; };
+  }, [action, data.liveAccess]);
   const [filters, setFilters] = useState({
     client: "All",
     actor: "All",
@@ -150,10 +164,11 @@ export function AuditLog({ data }) {
             />
           </Field>
         </div>
+        {loadError && <p role="alert">{loadError}</p>}
         <Table
           headers={headers}
           rows={matching}
-          empty="No audit events match these filters."
+          empty={loading ? "Loading audit events…" : loadError ? "Audit events could not be loaded." : "No audit events match these filters."}
         />
       </Card>
     </Page>
