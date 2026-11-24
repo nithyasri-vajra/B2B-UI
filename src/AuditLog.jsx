@@ -106,7 +106,7 @@ export function AuditLog({ data, action, client, scopedAudit }) {
   const set = (key, value) =>
     setFilters((current) => ({ ...current, [key]: value }));
   const clientName = (id) => data.clients.find((client) => client.id === id)?.name ?? "Unknown client";
-  const events = data.audit.map((event) => {
+  const events = (data.liveAccess ? remote.rows : data.audit).map((event) => {
     const before = accessSnapshot(event.before);
     const after = accessSnapshot(event.after);
     const clientIds = [...new Set([
@@ -203,7 +203,7 @@ export function AuditLog({ data, action, client, scopedAudit }) {
             />
           </Field>
         </div>
-        {loadError && <p role="alert">{loadError}</p>}
+        
         <Table
           headers={headers}
           rows={matching}
