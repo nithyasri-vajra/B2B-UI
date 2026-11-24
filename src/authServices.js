@@ -121,6 +121,27 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
   }
 
   const services = {
+    async loadAudit() {
+      const audit = [];
+      let offset = 0;
+      do {
+        const { data } = await call("/audit?offset=" + offset);
+        audit.push(...data.audit.map((event) => ({
+          id: String(event._id),
+          timestamp: event.occurredAt,
+          clientId: event.clientId,
+          actor: event.actor,
+          action: event.eventType,
+          object: event.target ?? event.outcome,
+          before: event.details?.before && JSON.stringify(event.details.before),
+          after: event.details?.after && JSON.stringify(event.details.after),
+          ip: event.ip,
+          device: event.device,
+        })));
+        offset = data.nextOffset ?? null;
+      } while (offset !== null);
+      return { data: { audit } };
+    },
     async loadClients() {
       return { data: { clients: await readClients() } };
     },
