@@ -1,4 +1,16 @@
 const sessionStatuses = new Set(["active", "pending", "denied", "expired"]);
+const accessDraftKey = "b2b.pending-user-access";
+const userStatuses = {
+  active: "Active", pending: "Pending role", suspended: "Suspended",
+  deactivated: "Deactivated in IdP",
+};
+const clientRoles = {
+  knowledge_admin: "Knowledge Admin", approver: "Approver",
+  marketing_operator: "Marketing Operator", viewer: "Viewer",
+};
+const roleKeys = Object.fromEntries(
+  Object.entries(clientRoles).map(([key, label]) => [label, key]),
+);
 
 export function createAuthServices(basePath, { origin, request = fetch } = {}) {
   const appOrigin = origin ?? window.location.origin;
@@ -35,8 +47,11 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
 
     const isJson = response.headers.get("content-type")?.includes("application/json");
     const result = isJson ? await response.json() : null;
-    if (!response.ok || !result || typeof result !== "object" || Array.isArray(result))
-      throw new Error("The authentication service could not complete this request.");
+    if (!response.ok || !result || typeof result !== "object" || Array.isArray(result)) {
+      const error = new Error(result?.message || "The authentication service could not complete this request.");
+      error.code = result?.code;
+      throw error;
+    }
 
     return result;
   }
@@ -49,7 +64,81 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
     return result.data;
   }
 
+  async function readUsers() {
+    const users = [];
+    let offset = 0;
+    do {
+      const { data } = await call("/users?offset=" + offset);
+      users.push(...data.users);
+      offset = data.nextOffset ?? null;
+    } while (offset !== null);
+    return users.map((user) => ({
+      email: user.email,
+      name: user.name,
+      status: userStatuses[user.status],
+      note: user.accessRequestNote,
+      requestedAt: user.accessRequestedAt,
+      global: user.globalRoles?.includes("platform_admin"),
+      assignments: Object.fromEntries((user.clientAssignments ?? []).map(
+        ({ clientId, roles }) => [clientId, roles.map((role) => clientRoles[role])],
+      )),
+    }));
+  }
+
+  async function readClients() {
+    return (await call("/clients")).data.clients;
+  }
+
+  async function saveAccess(payload) {
+    const result = await call("/user-access", payload);
+    try {
+      return { ...result, data: { users: await readUsers() } };
+    } catch {
+      return { ...result, refreshRequired: true, message: "Access saved. Go back to refresh the users list." };
+    }
+  }
+
+  async function changeAccess(payload) {
+    try {
+      return await saveAccess(payload);
+    } catch (error) {
+      if (error.code !== "reauthentication_required") throw error;
+      const { redirectUrl } = await call("/sign-in", { reauthenticate: true });
+      sessionStorage.setItem(accessDraftKey, JSON.stringify(payload));
+      return { redirectUrl };
+    }
+  }
+
+  async function resumeAccess() {
+    const draft = sessionStorage.getItem(accessDraftKey);
+    sessionStorage.removeItem(accessDraftKey);
+    if (draft) return saveAccess(JSON.parse(draft));
+  }
+
   const services = {
+    async loadClients() {
+      return { data: { clients: await readClients() } };
+    },
+    async createClient({ values }) {
+      return call("/clients", values);
+    },
+    async loadUsers() {
+      return { data: { users: await readUsers() } };
+    },
+    async saveUserAccess({ after, reason, confirmed }) {
+      return changeAccess({
+        email: after.email,
+        clientAssignments: Object.entries(after.assignments)
+          .filter(([, roles]) => roles.length)
+          .map(([clientId, roles]) => ({ clientId, roles: roles.map((role) => roleKeys[role]) })),
+        globalRoles: after.global ? ["platform_admin"] : [],
+        reason: reason.trim(),
+        confirmPlatformAdmin: confirmed === true,
+      });
+    },
+    async declineAccessRequest({ email, reason }) {
+      return changeAccess({ action: "decline", email, reason });
+    },
     async signIn({ chooseAccount = false } = {}) {
       const result = await call("/sign-in", { chooseAccount });
       if (typeof result.redirectUrl !== "string" || !result.redirectUrl.trim())
@@ -64,9 +153,10 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
 
     async signOut() {
       await call("/sign-out", {});
+      sessionStorage.removeItem(accessDraftKey);
       return { data: { session: null } };
     },
   };
 
-  return { readSession, services };
+  return { readSession, readClients, resumeAccess, services };
 }

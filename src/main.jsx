@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import { createAdminStore } from "./adminData";
 import { createAuthServices } from "./authServices";
@@ -111,12 +111,12 @@ export function B2BAgents({
       navigate(landingPages[session.role] ?? "home");
   }, [signedIn, page, session?.role]);
 
-  async function action(name, payload) {
+  const action = useCallback(async (name, payload) => {
     const result = await store.dispatch(name, {
       clientId: client?.id,
       ...payload,
     });
-    if (name === "signIn" && result?.redirectUrl) {
+    if (result?.redirectUrl) {
       const target = new URL(result.redirectUrl, window.location.origin);
       if (
         target.protocol !== "https:" &&
@@ -127,7 +127,7 @@ export function B2BAgents({
     }
     if (name === "signOut" && result !== false) navigate("sign-in");
     return result;
-  }
+  }, [store, client?.id]);
 
   if (page === "sign-in" || (requireSignIn && !signedIn)) {
     return (
@@ -203,6 +203,35 @@ if (mount && authApiPath) {
     try {
       const auth = createAuthServices(authApiPath);
       const data = await auth.readSession();
+      let accessNotice;
+      if (data.session?.status === "active") {
+        const query = new URLSearchParams(window.location.search);
+        if (query.has("accessReauthenticated") && data.session.role === "Platform Admin") {
+          query.delete("accessReauthenticated");
+          history.replaceState(null, "", window.location.pathname +
+            (query.size ? "?" + query : "") + window.location.hash);
+          try {
+            const saved = await auth.resumeAccess();
+            accessNotice = saved?.message;
+          } catch (error) {
+            accessNotice = error.message;
+          }
+        }
+        try {
+          data.clients = await auth.readClients();
+        } catch {
+          data.clientsLoadError = "Could not load clients.";
+        }
+        if (data.session.role === "Platform Admin") {
+          try {
+            data.users = (await auth.services.loadUsers()).data.users;
+          } catch (error) {
+            data.usersLoadError = error.message;
+          }
+        }
+      }
+      data.liveAccess = true;
+      data.accessNotice = accessNotice;
       const store = createAdminStore(data, auth.services);
       root.render(
         <B2BAgents

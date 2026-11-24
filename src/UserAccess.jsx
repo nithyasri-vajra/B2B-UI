@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Button,
   Card,
@@ -66,7 +66,7 @@ const userClients = (user, clients) =>
     ? clients
     : clients.filter((client) => user.assignments?.[client]?.length);
 
-function EditAccess({ user, clients, clientName, action, onClose, onSave }) {
+function EditAccess({ user, clients, clientName, action, onClose, onSave, liveAccess, clientsLoadError }) {
   const [draft, setDraft] = useState({
     ...user,
     assignments: user.assignments ?? {},
@@ -74,9 +74,19 @@ function EditAccess({ user, clients, clientName, action, onClose, onSave }) {
   const [roleOptions, setRoleOptions] = useState(userRoles(user));
   const [reason, setReason] = useState("");
   const [confirmed, setConfirmed] = useState(false);
-  const { submit, busy, feedback } = useAction(action);
+  const [clientsError, setClientsError] = useState(clientsLoadError);
+  const [accessSaved, setAccessSaved] = useState(false);
+  const { submit, busy, feedback } = useAction(async (name, payload) => {
+    const result = await action(name, payload);
+    if (name === "saveUserAccess" && result && !result.redirectUrl) {
+      if (result.refreshRequired) setAccessSaved(true);
+      else onSave();
+    }
+    return result;
+  });
   const effectiveRoles = userRoles(draft);
   const globalChanged = Boolean(draft.global) !== Boolean(user.global);
+  const needsConfirmation = globalChanged || (liveAccess && (draft.global || user.global));
 
   function selectRole(role, checked) {
     setRoleOptions((current) =>
@@ -115,8 +125,7 @@ function EditAccess({ user, clients, clientName, action, onClose, onSave }) {
     };
     submit(
       "saveUserAccess",
-      { before: user, after, reason, requiresStepUp: true },
-      () => onSave(after),
+      { before: user, after, reason, confirmed, requiresStepUp: true },
     );
   }
 
@@ -145,16 +154,17 @@ function EditAccess({ user, clients, clientName, action, onClose, onSave }) {
               <span className="muted">{descriptions[i]}</span>
             </label>
           ))}
-          {globalChanged && (
+          {(liveAccess || globalChanged) && (
             <>
-              <Field label="Reason for changing Platform Admin access">
+              <Field label="Reason for access change">
                 <textarea
                   required
+                  maxLength={2000}
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
                 />
               </Field>
-              <label>
+              {needsConfirmation && <label>
                 <input
                   type="checkbox"
                   required
@@ -162,11 +172,21 @@ function EditAccess({ user, clients, clientName, action, onClose, onSave }) {
                   onChange={(e) => setConfirmed(e.target.checked)}
                 />{" "}
                 Confirm Platform Admin access change
-              </label>
+              </label>}
             </>
           )}
         </Card>
         <Card title="Client assignments">
+          {clientsError && (
+            <div>
+              <p role="alert">{clientsError}</p>
+              <Button type="button" disabled={busy} onClick={() =>
+                submit("loadClients", {}, () => setClientsError(null))
+              }>
+                Retry loading clients
+              </Button>
+            </div>
+          )}
           <Table
             headers={["Client", ...roles.slice(1)]}
             rows={clients.map((client) => [
@@ -219,8 +239,9 @@ function EditAccess({ user, clients, clientName, action, onClose, onSave }) {
             primary
             type="submit"
             disabled={
-              busy ||
-              (globalChanged && (!confirmed || !reason.trim())) ||
+              busy || accessSaved || Boolean(clientsError) ||
+              (needsConfirmation && !confirmed) ||
+              ((liveAccess || globalChanged) && !reason.trim()) ||
               (user.status === "Pending role" && !effectiveRoles.length)
             }
           >
@@ -246,6 +267,21 @@ export function Users({
     availableClients.find((client) => client.id === id)?.name ?? id;
   const [view, setView] = useState(showRequests ? "Access requests" : "Users");
   const [editing, setEditing] = useState(null);
+  const [usersError, setUsersError] = useState(data.usersLoadError);
+  const [usersLoading, setUsersLoading] = useState(false);
+  useEffect(() => {
+    if (!data.liveAccess || editing) return;
+    let current = true;
+    setUsersLoading(true);
+    action("loadUsers").then(() => {
+      if (current) setUsersError(null);
+    }).catch((error) => {
+      if (current) setUsersError(error.message);
+    }).finally(() => {
+      if (current) setUsersLoading(false);
+    });
+    return () => { current = false; };
+  }, [action, data.liveAccess, view, editing]);
   const [filters, setFilters] = useState({
     search: "",
     role: "All",
@@ -279,6 +315,8 @@ export function Users({
         clients={clients}
         clientName={clientName}
         action={action}
+        liveAccess={data.liveAccess}
+        clientsLoadError={data.clientsLoadError && !availableClients.length ? data.clientsLoadError : null}
         onClose={() => setEditing(null)}
         onSave={() => setEditing(null)}
       />
@@ -295,6 +333,15 @@ export function Users({
         )
       }
     >
+      {data.accessNotice && <p role="status">{data.accessNotice}</p>}
+      {usersError && <p role="alert">{usersError}</p>}
+      {data.liveAccess && (
+        <Button disabled={busy || usersLoading} onClick={() =>
+          submit("loadUsers", {}, () => setUsersError(null))
+        }>
+          Refresh users
+        </Button>
+      )}
       <Tabs
         values={["Users", "Access requests", "Roles reference"]}
         value={view}
@@ -464,7 +511,7 @@ export function Users({
             headers={[
               "Name",
               "Email",
-              "Signed in at",
+              "Requested at",
               "Requested client",
               "Note",
               "Actions",
@@ -472,7 +519,7 @@ export function Users({
             rows={pending.map((user) => [
               user.name,
               user.email,
-              user.last,
+              user.requestedAt ? new Date(user.requestedAt).toLocaleString() : "-",
               user.requested ? clientName(user.requested) : "—",
               user.note ?? "—",
               <div className="admin-actions">
@@ -483,14 +530,14 @@ export function Users({
                   disabled={busy}
                   onClick={() => {
                     if (window.confirm("Decline this access request?"))
-                      submit("declineAccessRequest", { email: user.email });
+                      submit("declineAccessRequest", { email: user.email, reason: "Declined from access requests." });
                   }}
                 >
                   Decline
                 </Button>
               </div>,
             ])}
-            empty="No pending access requests."
+            empty={usersLoading ? "Loading access requests…" : usersError ? "Access requests could not be loaded." : "No pending access requests."}
           />
         </Card>
       )}
