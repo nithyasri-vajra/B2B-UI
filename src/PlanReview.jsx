@@ -124,7 +124,7 @@ export default function PlanReview(props) {
   return <PlanItemReview {...props} />;
 }
 
-function PlanItemReview({ data, client, run, href, action }) {
+function PlanItemReview({ data, client, run, href, action, canAct = () => true }) {
   const [view, setView] = useState("Table");
   const [selected, setSelected] = useState([]);
   const [requiresApprover, setRequiresApprover] = useState(false);
@@ -151,8 +151,8 @@ function PlanItemReview({ data, client, run, href, action }) {
     setReviewed(reviewKey);
     setConfirm(kind);
   }
-  const editable = run?.canEditPlan !== false;
-  const canDecide = run?.canApprovePlan !== false;
+  const editable = canAct("editPlanItem") && run?.canEditPlan !== false;
+  const canDecide = canAct("approvePlan") && run?.canApprovePlan !== false;
 
   function toggle(id) {
     setSelected((current) =>
@@ -212,7 +212,7 @@ function PlanItemReview({ data, client, run, href, action }) {
             value={view}
             onChange={setView}
           />
-          <div className="admin-actions">
+          {canAct("approvePlan") && <div className="admin-actions">
             <span className="muted">{chosen.length} selected</span>
             <Button
               disabled={!canDecide || !chosen.length || busy}
@@ -228,12 +228,12 @@ function PlanItemReview({ data, client, run, href, action }) {
             >
               Approve {chosen.length || ""} selected
             </button>
-          </div>
+          </div>}
         </div>
         {view === "Table" ? (
           <Table
             headers={[
-              <input
+              canAct("approvePlan") && <input
                 aria-label="Select all pending items"
                 type="checkbox"
                 disabled={!reviewable.length || !canDecide}
@@ -259,7 +259,7 @@ function PlanItemReview({ data, client, run, href, action }) {
               "",
             ]}
             rows={items.map((item) => [
-              <input
+              canAct("approvePlan") && <input
                 aria-label={"Select " + item.title}
                 type="checkbox"
                 checked={

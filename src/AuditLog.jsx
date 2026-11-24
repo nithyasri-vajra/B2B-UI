@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Card, Field, Page, Select, Table } from "./AdminControls";
 
 const headers = [
@@ -55,7 +55,20 @@ function exportCSV(entries) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export function AuditLog({ data }) {
+export function AuditLog({ data, action, client, scopedAudit }) {
+  const [remote, setRemote] = useState({ rows: [], nextOffset: null, loading: true });
+  const [offset, setOffset] = useState(0);
+  useEffect(() => {
+    if (!data.liveAccess) return;
+    let cancelled = false;
+    action("loadAudit", { offset }).then(({ audit, nextOffset }) => {
+      if (!cancelled) setRemote({ rows: audit, nextOffset, loading: false });
+    }).catch((error) => {
+      if (!cancelled) setRemote({ rows: [], nextOffset: null, loading: false, error: error.message });
+    });
+    return () => { cancelled = true; };
+  }, [action, data.liveAccess, offset]);
+
   const [filters, setFilters] = useState({
     client: "All",
     actor: "All",
@@ -64,7 +77,7 @@ export function AuditLog({ data }) {
   });
   const set = (key, value) =>
     setFilters((current) => ({ ...current, [key]: value }));
-  const events = data.audit.map((event) => {
+  const events = (data.liveAccess ? remote.rows : data.audit).map((event) => {
     const timestamp = new Date(event.timestamp);
     return {
       ...event,
@@ -97,7 +110,7 @@ export function AuditLog({ data }) {
   return (
     <Page
       title="Audit log"
-      description="Platform Admin · activity across all clients"
+      description={scopedAudit ? client?.name : "Platform Admin · activity across all clients"}
       actions={
         <Button
           primary
@@ -109,8 +122,9 @@ export function AuditLog({ data }) {
       }
     >
       <Card>
+        {remote.error && <p role="alert">{remote.error}</p>}
         <div className="admin-actions">
-          <Field label="Client">
+          {!scopedAudit && <Field label="Client">
             <select
               aria-label="Client filter"
               value={filters.client}
@@ -123,7 +137,7 @@ export function AuditLog({ data }) {
                 </option>
               ))}
             </select>
-          </Field>
+          </Field>}
           <Select
             label="Actor"
             options={[
@@ -153,8 +167,12 @@ export function AuditLog({ data }) {
         <Table
           headers={headers}
           rows={matching}
-          empty="No audit events match these filters."
+          empty={data.liveAccess && remote.loading ? "Loading audit events…" : "No audit events match these filters."}
         />
+        {data.liveAccess && <div className="admin-actions">
+          {offset > 0 && <Button onClick={() => setOffset(Math.max(0, offset - 250))}>Previous page</Button>}
+          {remote.nextOffset != null && <Button onClick={() => setOffset(remote.nextOffset)}>Next page</Button>}
+        </div>}
       </Card>
     </Page>
   );

@@ -116,6 +116,23 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
   }
 
   const services = {
+    async loadAudit({ clientId, offset }) {
+      const query = new URLSearchParams({ offset });
+      if (clientId) query.set("clientId", clientId);
+      const { data } = await call("/audit?" + query);
+      return {
+        audit: data.audit.map((event) => ({
+          ...event,
+          clientId: event.clientId == null ? undefined : String(event.clientId),
+          timestamp: event.occurredAt,
+          action: event.eventType,
+          object: event.target,
+          before: event.details?.before == null ? undefined : JSON.stringify(event.details.before),
+          after: event.details?.after == null ? undefined : JSON.stringify(event.details.after),
+        })),
+        nextOffset: data.nextOffset,
+      };
+    },
     async loadClients() {
       return { data: { clients: await readClients() } };
     },

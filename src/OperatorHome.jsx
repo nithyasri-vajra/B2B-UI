@@ -40,6 +40,9 @@ const nav = [
   ["approvals", "Approvals"],
   ["calendar", "Content calendar"],
   ["knowledge", "Knowledge"],
+  ["records", "Knowledge records"],
+  ["setup", "Knowledge setup"],
+  ["audit", "Audit log"],
 ];
 export function WorkflowShell({
   page,
@@ -67,7 +70,7 @@ export function WorkflowShell({
             <span className="ph">V</span>
             <strong>B2B Agents</strong>
           </div>
-          {nav.map(([key, label]) => (
+          {nav.filter(([key]) => href(key)).map(([key, label]) => (
             <a
               key={key}
               href={href(key)}
@@ -80,7 +83,7 @@ export function WorkflowShell({
               )}
             </a>
           ))}
-          {data.session?.role === "Platform Admin" && (
+          {href("overview") && (
             <a className="nav" href={href("overview")}>
               Admin
             </a>
@@ -141,6 +144,7 @@ export function WorkflowShell({
 }
 
 export function WorkflowLink({ href, children, primary, gate }) {
+  if (!href) return null;
   return (
     <a className={"btn" + (gate ? " gate" : primary ? " pri" : "")} href={href}>
       {children}
@@ -223,7 +227,7 @@ export function OperatorHome({ data, client, href }) {
                   <strong>{task.title}</strong>
                   <p className="muted">{task.dueAt ?? ""}</p>
                 </div>
-                {task.runId && (
+                {task.runId && href(task.page ?? "runs") && (
                   <a
                     href={href(task.page ?? "runs", {
                       run: task.runId,
@@ -283,7 +287,7 @@ function offsetDay(day, offset) {
   return date;
 }
 
-export function ContentCalendar({ data, client, href, action }) {
+export function ContentCalendar({ data, client, href, action, canAct = () => true }) {
   const [mode, setMode] = useState("Month");
   const [cursor, setCursor] = useState(() => new Date(dateKey.format(new Date())));
   const { submit, busy, feedback } = useAction(action);
@@ -327,10 +331,10 @@ export function ContentCalendar({ data, client, href, action }) {
                   <time className="muted" dateTime={key}>{day.getUTCDate()}</time>
                   {posts.filter((post) => dateKey.format(new Date(post.scheduledAt)) === key).map((post) => (
                     <article className="workflow-calendar-post" key={post.id}>
-                      <a href={href("post", { run: post.runId, post: post.id })}>{post.title ?? "Open post"}</a>
+                      {href("post") ? <a href={href("post", { run: post.runId, post: post.id })}>{post.title ?? "Open post"}</a> : post.title}
                       <span>{calendarTime.format(new Date(post.scheduledAt))}</span>
                       <div><Chip tone={tones[post.status]}>{post.status}</Chip></div>
-                      {post.status === "Scheduled" && (
+                      {post.status === "Scheduled" && canAct("holdPost", null) && (
                         <div className="admin-actions">
                           <Button disabled={busy} onClick={() => changeSchedule(post, "holdPost", "Hold")}>Hold</Button>
                           <Button disabled={busy} onClick={() => changeSchedule(post, "cancelScheduledPost", "Cancel")}>Cancel</Button>

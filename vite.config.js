@@ -7,7 +7,9 @@ export default defineConfig(({ mode }) => {
   const authProxy = authPath === "/api/auth"
     ? { "/api/auth": "http://127.0.0.1:3001" }
     : undefined;
-  const configure = (server) => { previewRunMiddleware(server, env); };
+  const configure = (server) => {
+    if (!authPath) previewRunMiddleware(server, env);
+  };
   return {
     esbuild: { jsx: "automatic" },
     server: {
@@ -20,7 +22,6 @@ export default defineConfig(({ mode }) => {
     plugins: [{
       name: "preview-run",
       configureServer: configure,
-      configurePreviewServer: configure,
     }],
   };
 });

@@ -44,7 +44,7 @@ function RunPipeline({ run, agent, planning }) {
   );
 }
 
-export default function RunWorkspace({ data, client, run, href, action, preview }) {
+export default function RunWorkspace({ data, client, run, href, action, preview, canAct = () => true }) {
   const [tab, setTab] = useState("Activity");
   const [answer, setAnswer] = useState("");
   const [questionId, setQuestionId] = useState("");
@@ -104,7 +104,7 @@ export default function RunWorkspace({ data, client, run, href, action, preview 
   ));
   const canPlan = ["READY", "LIMITED"].includes(qualification?.verdict)
     && (!planning?.planner || planning.planner.verdict === "BLOCKED");
-  const canChange = !run.qualificationResult && !["Completed", "Cancelled", "Failed"].includes(run.status);
+  const canChange = canAct("cancelRun") && !run.qualificationResult && !["Completed", "Cancelled", "Failed"].includes(run.status);
   const selectedQuestion = questions.find(
     (item) => item.id === questionId && !item.answer,
   );
@@ -154,7 +154,7 @@ export default function RunWorkspace({ data, client, run, href, action, preview 
           {qualification?.verdict === "LIMITED" && (
             <p>The planner will use the restrictions in the Brief Qualifier report above.</p>
           )}
-          {canPlan && (
+          {canPlan && canAct("planContent") && (
             <Button primary disabled={busy} onClick={() => change("planContent")}>
               {busy ? "Generating plan…" : "Generate content plan"}
             </Button>
@@ -178,7 +178,7 @@ export default function RunWorkspace({ data, client, run, href, action, preview 
             <p className="muted">Owner · {run.blocker.owner}</p>
           )}
           <div className="admin-actions">
-            {run.blocker.actions?.includes("askKnowledgeAdmin") && (
+            {canAct("askKnowledgeAdmin") && run.blocker.actions?.includes("askKnowledgeAdmin") && (
               <Button
                 disabled={busy}
                 onClick={() => change("askKnowledgeAdmin")}
@@ -186,7 +186,7 @@ export default function RunWorkspace({ data, client, run, href, action, preview 
                 Ask Knowledge Admin
               </Button>
             )}
-            {run.blocker.actions?.includes("rewriteWithoutClaim") && (
+            {canAct("rewriteWithoutClaim") && run.blocker.actions?.includes("rewriteWithoutClaim") && (
               <Button
                 disabled={busy}
                 onClick={() => change("rewriteWithoutClaim")}
@@ -194,7 +194,7 @@ export default function RunWorkspace({ data, client, run, href, action, preview 
                 Rewrite without claim
               </Button>
             )}
-            {questions.some((item) => !item.answer) && (
+            {canAct("answerRunQuestion") && questions.some((item) => !item.answer) && (
               <Button onClick={() => setTab("Questions")}>
                 Answer questions
               </Button>
@@ -260,9 +260,9 @@ export default function RunWorkspace({ data, client, run, href, action, preview 
           <Table
             headers={["Post", "Pillar", "Scheduled", "Status"]}
             rows={posts.map((item) => [
-              <a href={href("post", { run: run.id, post: item.id })}>
+              href("post") ? <a href={href("post", { run: run.id, post: item.id })}>
                 {item.title}
-              </a>,
+              </a> : item.title,
               item.pillar ?? "—",
               item.scheduledAt ?? "—",
               <Chip>{item.status}</Chip>,
@@ -317,7 +317,7 @@ export default function RunWorkspace({ data, client, run, href, action, preview 
                   <strong>{item.prompt}</strong>
                   {item.answer ? (
                     <p>{item.answer}</p>
-                  ) : (
+                  ) : canAct("answerRunQuestion") && (
                     <Button
                       onClick={() => {
                         setQuestionId(item.id);

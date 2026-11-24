@@ -22,7 +22,7 @@ const states = [
 const views = ["Records", "Change proposals"];
 const decisions = ["Keep A", "Keep B", "Keep both with scope", "Escalate"];
 
-export function Records({ action, data, client, link }) {
+export function Records({ action, data, client, link, readOnly = false }) {
   const [view, setView] = useState(views[0]);
   const records = client
     ? data.records.filter((item) => item.clientId === client.id)
@@ -156,7 +156,7 @@ export function Records({ action, data, client, link }) {
               proposal.materiality ?? "—",
               proposal.affectedPosts?.join(", ") || "—",
               <Chip>{proposal.status ?? "Pending review"}</Chip>,
-              <div className="admin-actions">
+              !readOnly && <div className="admin-actions">
                 {[
                   ["Approve", "Approved"],
                   ["Reject", "Rejected"],
@@ -284,7 +284,7 @@ export function Records({ action, data, client, link }) {
                     {record.history?.join(" · ") || "No history yet."}
                   </p>
                 </div>
-                <div className="admin-actions">
+                {!readOnly && <div className="admin-actions">
                   <Button
                     primary
                     disabled={
@@ -350,7 +350,7 @@ export function Records({ action, data, client, link }) {
                       View conflict
                     </Button>
                   )}
-                </div>
+                </div>}
               </>
             )}
             {conflict && rival && (

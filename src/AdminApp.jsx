@@ -1,4 +1,4 @@
-import { useCallback, useId, useState, useSyncExternalStore } from "react";
+import { Fragment, useCallback, useId, useState, useSyncExternalStore } from "react";
 import AdminOverview from "./AdminOverview";
 import KnowledgeSetup from "./KnowledgeSetup";
 import KnowledgeReadiness from "./KnowledgeReadiness";
@@ -48,6 +48,11 @@ export default function AdminApp({
   onRedirect,
   onKnowledgePublished,
   selectedClientId,
+  scopedClients,
+  onClientChange,
+  canOpen = () => true,
+  readOnly = false,
+  scopedAudit = false,
   store,
 }) {
   const clientId = useId();
@@ -58,25 +63,23 @@ export default function AdminApp({
     source.getSnapshot,
     source.getSnapshot,
   );
-  const clients = data.clients.filter((client) => !client.archived);
+  const clients = scopedClients ?? data.clients.filter((client) => !client.archived);
   const [selection, setSelection] = useState(selectedClientId ?? "");
   const [showNotifications, setShowNotifications] = useState(false);
-  const client = clients.find((item) => item.id === selection) ?? clients[0];
+  const client = clients.find((item) => item.id === (onClientChange ? selectedClientId : selection)) ?? clients[0];
   const notifications = data.notifications.filter(
     (item) => !item.clientId || item.clientId === client?.id,
   );
 
   const action = useCallback(async (name, payload) => {
     const scoped = { clientId: client?.id, ...payload };
-    const result = await onAction?.(
-      name,
-      payload === undefined ? undefined : scoped,
-    );
+    if (onClientChange && onAction) return onAction(name, scoped);
+    const result = await onAction?.(name, payload === undefined ? undefined : scoped);
     if (result?.data) source.ingest(result.data);
     const outcome = result === undefined ? await source.dispatch(name, scoped) : result;
     if (outcome?.redirectUrl) onRedirect?.(outcome.redirectUrl);
     return outcome;
-  }, [source, client?.id, onAction, onRedirect]);
+  }, [source, client?.id, onAction, onRedirect, onClientChange]);
   const Screen = screens[page] ?? AdminOverview;
   const activeNav =
     {
@@ -89,8 +92,8 @@ export default function AdminApp({
     return pagesByFile[file] === activeNav ? "nav on" : "nav";
   }
 
-  function link(file) {
-    return { href: hrefFor(file, pagesByFile[file]) };
+  function link(file, target = pagesByFile[file]) {
+    return { href: hrefFor(file, target) };
   }
 
   return (
@@ -113,58 +116,26 @@ export default function AdminApp({
             </div>
             <strong style={{ fontSize: "15px" }}>B2B Agents</strong>
           </div>
-          <a className={navClass("Main.dc.html")} {...link("Main.dc.html")}>
-            Home
-          </a>
-          <a
-            className={navClass("RunWorkspace.dc.html")}
-            {...link("RunWorkspace.dc.html")}
-          >
-            Runs
-          </a>
-          <a
-            className={navClass("Readiness.dc.html")}
-            {...link("Readiness.dc.html")}
-          >
-            Knowledge
-          </a>
-          <p className="sec">Admin</p>
-          <a
-            className={navClass("AdminOverview.dc.html")}
-            {...link("AdminOverview.dc.html")}
-          >
-            Overview
-          </a>
-          <a className={navClass("#clients")} {...link("#clients")}>
-            Clients
-          </a>
-          <a
-            className={navClass("KnowledgeSetup.dc.html")}
-            {...link("KnowledgeSetup.dc.html")}
-          >
-            Knowledge setup
-          </a>
-          <a
-            className={navClass("RecordReview.dc.html")}
-            {...link("RecordReview.dc.html")}
-          >
-            Knowledge records
-          </a>
-          <a className={navClass("Users.dc.html")} {...link("Users.dc.html")}>
-            Users and roles
-          </a>
-          <a className={navClass("Agents.dc.html")} {...link("Agents.dc.html")}>
-            Agents and skills
-          </a>
-          <a className={navClass("#integrations")} {...link("#integrations")}>
-            Integrations
-          </a>
-          <a
-            className={navClass("AuditLog.dc.html")}
-            {...link("AuditLog.dc.html")}
-          >
-            Audit log
-          </a>
+          {[
+            ["Main.dc.html", "home", "Home"],
+            ["RunWorkspace.dc.html", "runs", "Runs"],
+            ["Readiness.dc.html", "readiness", "Knowledge"],
+            ...(onClientChange ? [["#approvals", "approvals", "Approvals"], ["#calendar", "calendar", "Content calendar"]] : []),
+            ["AdminOverview.dc.html", "overview", "Overview"],
+            ["#clients", "clients", "Clients"],
+            ["KnowledgeSetup.dc.html", "setup", "Knowledge setup"],
+            ["RecordReview.dc.html", "records", "Knowledge records"],
+            ["Users.dc.html", "users", "Users and roles"],
+            ["#access-requests", "requests", "Access requests"],
+            ["Agents.dc.html", "agents", "Agents and skills"],
+            ["#integrations", "integrations", "Integrations"],
+            ["AuditLog.dc.html", "audit", "Audit log"],
+          ].filter(([, target]) => canOpen(target)).map(([file, target, label]) => (
+            <Fragment key={file}>
+              {target === "overview" && <p className="sec">Admin</p>}
+              <a className={navClass(file)} {...link(file, target)}>{label}</a>
+            </Fragment>
+          ))}
         </nav>
         <div className="main">
           <header className="top">
@@ -176,7 +147,7 @@ export default function AdminApp({
               id={clientId}
               value={client?.id ?? ""}
               disabled={!clients.length}
-              onChange={(event) => setSelection(event.target.value)}
+              onChange={(event) => (onClientChange ?? setSelection)(event.target.value)}
             >
               {!clients.length && <option value="">No clients</option>}
               {clients.map((item) => (
@@ -228,7 +199,7 @@ export default function AdminApp({
           <Screen
             link={link}
             key={
-              ["setup", "records", "readiness", "client-settings"].includes(
+              ["setup", "records", "readiness", "client-settings", "audit"].includes(
                 page,
               )
                 ? page + ":" + (client?.id ?? "")
@@ -239,6 +210,8 @@ export default function AdminApp({
             settings={page === "client-settings"}
             showRequests={page === "requests"}
             action={action}
+            readOnly={readOnly}
+            scopedAudit={scopedAudit}
             data={data}
             clients={clients}
             client={client}

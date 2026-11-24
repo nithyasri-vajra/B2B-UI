@@ -12,7 +12,7 @@ import {
 import { WorkflowLink } from "./OperatorHome";
 import { ReviewDialog } from "./PlanReview";
 
-export default function PostReview({ data, client, run, post, href, action }) {
+export default function PostReview({ data, client, run, post, href, action, canAct = () => true }) {
   const [size, setSize] = useState("Desktop");
   const [tab, setTab] = useState("QA");
   const [profileId, setProfileId] = useState(post?.profileId ?? "");
@@ -230,7 +230,7 @@ export default function PostReview({ data, client, run, post, href, action }) {
               ) : (
                 <p className="muted">No comments yet.</p>
               )}
-              <form
+              {canAct("commentOnPost") && <form
                 className="workflow-form"
                 onSubmit={(event) => {
                   event.preventDefault();
@@ -251,9 +251,10 @@ export default function PostReview({ data, client, run, post, href, action }) {
                 <Button disabled={busy || !comment.trim()} type="submit">
                   Add comment
                 </Button>
-              </form>
+              </form>}
             </>
           )}
+          {canAct("approvePost") && <>
           <h2>Publish to</h2>
           <Field label="LinkedIn test profile">
             <select
@@ -284,6 +285,7 @@ export default function PostReview({ data, client, run, post, href, action }) {
               Send connect request
             </Button>
           )}
+          </>}
         </Card>
       </div>
       {feedback}
@@ -294,7 +296,7 @@ export default function PostReview({ data, client, run, post, href, action }) {
             {profile?.name ?? "Select a profile"} · Version{" "}
             {post.version ?? "—"}
           </p>
-          <div className="admin-actions">
+          {canAct("approvePost") && <div className="admin-actions">
             <Button
               disabled={!approveAllowed || busy}
               onClick={() => openDecision("hold")}
@@ -327,7 +329,7 @@ export default function PostReview({ data, client, run, post, href, action }) {
             >
               Approve this version
             </button>
-          </div>
+          </div>}
         </div>
       </section>
       {decision && (
