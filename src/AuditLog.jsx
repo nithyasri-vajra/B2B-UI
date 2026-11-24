@@ -30,6 +30,34 @@ function dateKey(date) {
   );
   return parts.year + "-" + parts.month + "-" + parts.day;
 }
+const actionLabels = {
+  user_access_changed: "Access updated",
+  sign_in: "Sign-in",
+  reauthentication: "Identity verified",
+};
+const displayLabel = (value) => value?.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+
+function accessSnapshot(value) {
+  if (!value || typeof value !== "string" || !value.startsWith("{")) return null;
+  try {
+    const snapshot = JSON.parse(value);
+    return Array.isArray(snapshot.clientAssignments) ? snapshot : null;
+  } catch {
+    return null;
+  }
+}
+
+function accessSummary(value, snapshot, clientName) {
+  if (!snapshot) return value ?? "—";
+  return [
+    displayLabel(snapshot.status),
+    ...(snapshot.globalRoles ?? []).map(displayLabel),
+    ...snapshot.clientAssignments.map(({ clientId, roles }) =>
+      clientName(clientId) + ": " + roles.map(displayLabel).join(", "),
+    ),
+  ].filter(Boolean).join(" · ");
+}
+
 function exportCSV(entries) {
   const csv = [headers, ...entries]
     .map((line) =>
@@ -78,10 +106,21 @@ export function AuditLog({ data, action }) {
   });
   const set = (key, value) =>
     setFilters((current) => ({ ...current, [key]: value }));
+  const clientName = (id) => data.clients.find((client) => client.id === id)?.name ?? "Unknown client";
   const events = data.audit.map((event) => {
+    const before = accessSnapshot(event.before);
+    const after = accessSnapshot(event.after);
+    const clientIds = [...new Set([
+      event.clientId,
+      ...[before, after].flatMap((snapshot) => snapshot?.clientAssignments.map(({ clientId }) => clientId) ?? []),
+    ].filter(Boolean))];
     const timestamp = new Date(event.timestamp);
     return {
       ...event,
+      clientIds,
+      action: actionLabels[event.action] ?? displayLabel(event.action),
+      before: accessSummary(event.before, before, clientName),
+      after: accessSummary(event.after, after, clientName),
       date: Number.isNaN(timestamp.getTime()) ? "" : dateKey(timestamp),
       time: Number.isNaN(timestamp.getTime())
         ? ""
@@ -92,14 +131,14 @@ export function AuditLog({ data, action }) {
     .filter(
       (event) =>
         (!filters.date || event.date === filters.date) &&
-        (filters.client === "All" || event.clientId === filters.client) &&
+        (filters.client === "All" || event.clientIds.includes(filters.client)) &&
         (filters.actor === "All" || event.actor === filters.actor) &&
         (filters.action === "All" || event.action === filters.action),
     )
     .sort((a, b) => (b.timestamp ?? "").localeCompare(a.timestamp ?? ""))
     .map((event) => [
       event.date ? event.date + " " + event.time : "—",
-      data.clients.find((client) => client.id === event.clientId)?.name ?? "—",
+      event.clientIds.map(clientName).join(", ") || "—",
       event.actor ?? "—",
       event.action,
       event.object ?? "—",
