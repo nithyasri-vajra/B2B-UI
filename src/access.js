@@ -1,8 +1,8 @@
 const clientPages = {
-  knowledge_admin: ["setup", "records", "knowledge", "readiness", "audit"],
-  approver: ["runs", "approvals", "plan", "post", "calendar", "audit", "records", "knowledge", "readiness"],
-  marketing_operator: ["home", "new-run", "runs", "plan", "post", "calendar", "records", "knowledge", "readiness"],
-  viewer: ["runs", "post", "calendar", "knowledge", "readiness"],
+  knowledge_admin: ["home", "runs", "post", "calendar", "setup", "records", "knowledge", "readiness", "audit"],
+  approver: ["home", "new-run", "runs", "approvals", "plan", "post", "calendar", "audit", "records", "knowledge", "readiness"],
+  marketing_operator: ["home", "new-run", "runs", "approvals", "plan", "post", "calendar", "records", "knowledge", "readiness"],
+  viewer: ["home", "runs", "post", "calendar", "readiness"],
 };
 
 const platformPages = [
@@ -49,28 +49,48 @@ export const hasAccess = (session) =>
     .some((assignment) => rolesForClient(session, assignment?.clientId).length > 0);
 
 export function canOpenPage(session, clientId, page) {
+  const adminClientPages = ["home", "runs", "post", "calendar", "records", "knowledge", "readiness", "setup"];
   return (isPlatformAdmin(session) && platformPages.includes(page)) ||
+    (isPlatformAdmin(session) && clientId != null && adminClientPages.includes(page)) ||
     rolesForClient(session, clientId).some((role) => clientPages[role].includes(page));
 }
 
 export function landingPage(session, clientId) {
-  return ["overview", "setup", "approvals", "home", "calendar"]
-    .find((page) => canOpenPage(session, clientId, page));
+  if (isPlatformAdmin(session)) return "overview";
+  const roles = rolesForClient(session, clientId);
+  if (roles.includes("knowledge_admin")) return "readiness";
+  if (roles.includes("approver")) return "approvals";
+  if (roles.includes("marketing_operator")) return "home";
+  if (roles.includes("viewer")) return "calendar";
 }
 
-export function canPerformAction(session, clientId, name, run) {
+export function canPerformAction(session, clientId, name, run, { separation = false } = {}) {
   if (name === "signIn" || name === "signOut") return true;
   if (name === "requestAccess") return session?.status === "pending";
   if (platformActions.includes(name)) return isPlatformAdmin(session);
   if (name === "loadAudit") return canOpenPage(session, clientId, "audit");
+  if (clientId == null || (run && String(run.clientId) !== String(clientId))) return false;
   const roles = rolesForClient(session, clientId);
+  const admin = isPlatformAdmin(session);
+  const approver = roles.includes("approver");
+  const operator = roles.includes("marketing_operator");
+  const ownerEmail = run?.ownerEmail ?? run?.owner;
+  const owner = Boolean(session?.email && typeof ownerEmail === "string" &&
+    ownerEmail.toLowerCase() === session.email.toLowerCase());
+  const ownRun = operator && owner;
+  if (name === "uploadSources" || name === "saveKnowledgeSetup")
+    return admin || roles.includes("knowledge_admin");
   if (knowledgeActions.includes(name)) return roles.includes("knowledge_admin");
-  if (approvalActions.includes(name)) return roles.includes("approver");
-  if (!roles.includes("marketing_operator")) return false;
-  if (runOwnerActions.includes(name) || (run && operatorActions.includes(name))) {
-    const ownerEmail = run?.ownerEmail ?? run?.owner;
-    return Boolean(session.email && typeof ownerEmail === "string" &&
-      ownerEmail.toLowerCase() === session.email.toLowerCase());
-  }
-  return operatorActions.includes(name);
+  if (name === "requestPlanApproval") return ownRun;
+  if (name === "approvePlan" || name === "rejectPlan")
+    return ownRun || (approver && !owner && run?.requiresApprover === true);
+  if (name === "approvePost" || name === "approvePosts")
+    return Boolean(run && approver && (!separation || (ownerEmail && !owner)));
+  if (["cancelRun", "holdPost", "cancelScheduledPost"].includes(name))
+    return Boolean(run && (admin || approver || ownRun));
+  if (name === "editPlanItem" || name === "replaceBrief")
+    return Boolean(run && (approver || ownRun));
+  if (approvalActions.includes(name)) return Boolean(run && approver);
+  if (runOwnerActions.includes(name)) return ownRun;
+  return operatorActions.includes(name) && (approver || (operator && (!run || owner)));
 }
