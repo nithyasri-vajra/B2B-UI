@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/auth/:path*",
+      "destination": "https://b2b-backend-387a.onrender.com/api/auth/:path*"
+    }
+  ]
+}
