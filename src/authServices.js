@@ -12,6 +12,18 @@ const roleKeys = Object.fromEntries(
   Object.entries(clientRoles).map(([key, label]) => [label, key]),
 );
 
+const toAdminUser = (user) => ({
+  email: user.email,
+  name: user.name,
+  status: userStatuses[user.status],
+  note: user.accessRequestNote,
+  requestedAt: user.accessRequestedAt,
+  global: user.globalRoles?.includes("platform_admin"),
+  assignments: Object.fromEntries((user.clientAssignments ?? []).map(
+    ({ clientId, roles }) => [clientId, roles.map((role) => clientRoles[role])],
+  )),
+});
+
 export function createAuthServices(basePath, { origin, request = fetch } = {}) {
   const appOrigin = origin ?? window.location.origin;
   const base = new URL(basePath, appOrigin);
@@ -72,17 +84,7 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
       users.push(...data.users);
       offset = data.nextOffset ?? null;
     } while (offset !== null);
-    return users.map((user) => ({
-      email: user.email,
-      name: user.name,
-      status: userStatuses[user.status],
-      note: user.accessRequestNote,
-      requestedAt: user.accessRequestedAt,
-      global: user.globalRoles?.includes("platform_admin"),
-      assignments: Object.fromEntries((user.clientAssignments ?? []).map(
-        ({ clientId, roles }) => [clientId, roles.map((role) => clientRoles[role])],
-      )),
-    }));
+    return users.map(toAdminUser);
   }
 
   async function readClients() {
@@ -91,6 +93,9 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
 
   async function saveAccess(payload) {
     const result = await call("/user-access", payload);
+    if (Array.isArray(result.data?.users) && result.data.users.length) {
+      return { ...result, data: { users: result.data.users.map(toAdminUser) } };
+    }
     try {
       return { ...result, data: { users: await readUsers() } };
     } catch {
@@ -152,6 +157,15 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
         reason: reason.trim(),
         confirmPlatformAdmin: confirmed === true,
       });
+    },
+    async preAddUser({ email }) {
+      return changeAccess({ action: "pre_add", email });
+    },
+    async suspendUser({ email }) {
+      return changeAccess({ action: "suspend", email });
+    },
+    async removeUserFromClient({ email, client }) {
+      return changeAccess({ action: "remove_client", email, clientId: client });
     },
     async declineAccessRequest({ email, reason }) {
       return changeAccess({ action: "decline", email, reason });
