@@ -148,7 +148,7 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
       return { data: { users: await readUsers() } };
     },
     async saveUserAccess({ after, reason, confirmed }) {
-      return changeAccess({
+      const result = await call("/user-access", {
         email: after.email,
         clientAssignments: Object.entries(after.assignments)
           .filter(([, roles]) => roles.length)
@@ -157,6 +157,7 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
         reason: reason.trim(),
         confirmPlatformAdmin: confirmed === true,
       });
+      return { ...result, data: { users: result.data.users.map(toAdminUser) } };
     },
    async preAddUser({ email }) {
   return saveAccess({ action: "pre_add", email });

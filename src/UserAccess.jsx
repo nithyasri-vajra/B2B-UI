@@ -74,13 +74,9 @@ function EditAccess({ user, clients, clientName, action, onClose, onSave, client
   const [reason, setReason] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [clientsError, setClientsError] = useState(clientsLoadError);
-  const [accessSaved, setAccessSaved] = useState(false);
   const { submit, busy, feedback } = useAction(async (name, payload) => {
     const result = await action(name, payload);
-    if (name === "saveUserAccess" && result && !result.redirectUrl) {
-      if (result.refreshRequired) setAccessSaved(true);
-      else onSave(result.message || "User access saved.");
-    }
+    if (name === "saveUserAccess" && result) onSave(result.message || "User access saved.");
     return result;
   });
   const effectiveRoles = userRoles(draft);
@@ -142,7 +138,7 @@ function EditAccess({ user, clients, clientName, action, onClose, onSave, client
                   <input
                     aria-label={clientName(client) + " " + role}
                     type="checkbox"
-                    disabled={busy || accessSaved}
+                    disabled={busy}
                     checked={draft.assignments[client]?.includes(role) ?? false}
                     onChange={(e) => assign(client, role, e.target.checked)}
                   />
@@ -153,7 +149,7 @@ function EditAccess({ user, clients, clientName, action, onClose, onSave, client
         <Card title="Platform access">
           <label>
             <input type="checkbox" checked={Boolean(draft.global)}
-              disabled={busy || accessSaved}
+              disabled={busy}
               onChange={(event) => {
                 setDraft({ ...draft, global: event.target.checked });
                 setConfirmed(false);
@@ -211,7 +207,7 @@ function EditAccess({ user, clients, clientName, action, onClose, onSave, client
             primary
             type="submit"
             disabled={
-              busy || accessSaved || Boolean(clientsError) ||
+              busy || Boolean(clientsError) ||
               (globalChanged && (!confirmed || !reason.trim())) ||
               (user.status === "Pending role" && !effectiveRoles.length)
             }
@@ -241,7 +237,7 @@ export function Users({
   const [usersError, setUsersError] = useState(data.usersLoadError);
   const [usersLoading, setUsersLoading] = useState(false);
   useEffect(() => {
-    if (!data.liveAccess || editing) return;
+    if (!data.liveAccess) return;
     let current = true;
     setUsersLoading(true);
     action("loadUsers").then(() => {
@@ -252,7 +248,7 @@ export function Users({
       if (current) setUsersLoading(false);
     });
     return () => { current = false; };
-  }, [action, data.liveAccess, view, editing]);
+  }, [action, data.liveAccess, view]);
   const [filters, setFilters] = useState({
     search: "",
     role: "All",
