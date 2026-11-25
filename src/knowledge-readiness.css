@@ -1,0 +1,45 @@
+.knowledge-readiness {
+  flex: 1;
+  min-width: 0;
+  background: #f4efe6;
+  color: #142821;
+}
+
+.knowledge-readiness-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  border-bottom: 1px solid #e8e1d6;
+}
+
+.knowledge-readiness-tabs > * {
+  padding: 7px 0;
+}
+
+.knowledge-readiness-tabs [aria-current] {
+  color: #19493b;
+  border-bottom: 2px solid #19493b;
+  font-weight: 600;
+}
+
+.knowledge-readiness-top {
+  display: grid;
+  gap: 15px;
+  align-items: start;
+}
+
+.knowledge-readiness .card {
+  min-width: 0;
+  border-color: #e8e1d6;
+  border-radius: 10px;
+}
+
+.knowledge-readiness .admin-table { overflow-x: auto; }
+.knowledge-readiness .knowledge-score { font-size: 32px; }
+.knowledge-readiness .knowledge-score small { font-size: 12px; }
+.knowledge-readiness progress { accent-color: #19493b; }
+.knowledge-readiness .btn.pri { background: #19493b; border-color: #19493b; color: #fff; }
+
+@media (min-width: 900px) {
+  .knowledge-readiness-top { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
+}

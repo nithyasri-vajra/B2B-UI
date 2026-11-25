@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import { createAdminStore } from "./adminData";
 import { createAuthServices } from "./authServices";
@@ -6,7 +6,7 @@ import AdminApp, { adminPages } from "./AdminApp";
 import KnowledgeReadiness from "./KnowledgeReadiness";
 import { createPreviewStore } from "./createPreviewStore";
 import { restorePreviewStore } from "./previewStorage";
-import { ContentCalendar, OperatorHome, WorkflowShell } from "./OperatorHome";
+import { ContentCalendar, needsFirstRunSetup, OperatorHome, WorkflowShell } from "./OperatorHome";
 import { canOpenPage, canPerformAction, hasAccess, isPlatformAdmin, landingPage, rolesForClient } from "./access";
 import SignIn from "./SignIn";
 import NewRun from "./NewRun";
@@ -14,6 +14,22 @@ import RunWorkspace from "./RunWorkspace";
 import PlanReview from "./PlanReview";
 import PostReview from "./PostReview";
 import ApprovalsQueue from "./ApprovalsQueue";
+import MyBrands from "./MyBrands";
+import { MyProfile, Outputs } from "./BrandViews";
+import { Button, useAction } from "./AdminControls";
+import { LiveApprovals, LivePlan, LivePost } from "./LiveWorkflow";
+
+function LogoutButton({ action }) {
+  const { submit, busy, feedback } = useAction(action);
+  return (
+    <div>
+      <Button disabled={busy} onClick={() => submit("signOut")}>
+        {busy ? "Logging out…" : "Logout"}
+      </Button>
+      {feedback}
+    </div>
+  );
+}
 
 const screens = {
   home: OperatorHome,
@@ -24,6 +40,8 @@ const screens = {
   post: PostReview,
   approvals: ApprovalsQueue,
   calendar: ContentCalendar,
+  profile: MyProfile,
+  outputs: Outputs,
 };
 const earlierLinks = { "Main.dc.html": "home", "RunWorkspace.dc.html": "runs" };
 
@@ -80,8 +98,15 @@ export function B2BAgents({
     clients.find((item) => item.id === requestedClient);
   const allowed = (target, id = client?.id) =>
     !requireSignIn || canOpenPage(session, id, target);
+  const approvalsClient = clients.find(({ id }) => allowed("approvals", id));
+  const approvalsHref = approvalsClient
+    ? workflowHref("approvals", { client: approvalsClient.id })
+    : undefined;
   const landing = (id) => requireSignIn ? landingPage(session, id) : defaultPage;
-  const page = route || landing(client?.id) || defaultPage;
+  const brandsAllowed = requireSignIn && signedIn && (platformAdmin || clients.length > 1);
+  const initialPage = brandsAllowed ? "my-brands" : signedIn && requireSignIn && client ? "home" : landing(client?.id);
+  const page = route || initialPage || defaultPage;
+  const brandAudit = page === "audit" && params.get("scope") === "brand";
   const knowledgeEditor = !requireSignIn || rolesForClient(session, client?.id).includes("knowledge_admin");
   const run =
     client &&
@@ -100,10 +125,23 @@ export function B2BAgents({
         item.id === params.get("post"),
     );
   const adminPage = adminPages.includes(page);
-  const landingTarget = landing(client?.id);
+  const landingTarget = initialPage;
+  const [detailError, setDetailError] = useState("");
+  const detailProject = page === "post" ? post?.projectId : run?.projectId;
+  const detailId = page === "post" ? post?.id : run?.id;
+  useEffect(() => {
+    setDetailError("");
+    if (!data.liveAccess || !pageAllowed || !detailProject || !detailId || !["runs", "post", "plan"].includes(page)) return;
+    let active = true;
+    const request = page === "post"
+      ? ["loadPostDetail", { projectId: detailProject, postId: detailId }]
+      : ["loadRunDetail", { projectId: detailProject, runId: detailId }];
+    store.dispatch(...request).catch((error) => { if (active) setDetailError(error.message); });
+    return () => { active = false; };
+  }, [data.liveAccess, pageAllowed, page, detailProject, detailId, store]);
   useEffect(() => {
     if (signedIn && page === "sign-in" && landingTarget)
-      navigate(landingTarget, { client: client?.id });
+      navigate(landingTarget, landingTarget === "my-brands" ? {} : { client: client?.id });
   }, [signedIn, page, landingTarget, client?.id]);
 
   const action = useCallback(async (name, payload = {}) => {
@@ -111,19 +149,50 @@ export function B2BAgents({
     const actionRun = payload.runId === undefined ? undefined : data.runs.find(
       (item) => item.clientId === targetClient && item.id === payload.runId,
     );
+    const scopedRole = rolesForClient(session, targetClient);
+    const assignedReview = data.reviewDecisions?.find((review) => review._id === payload.reviewId &&
+      String(review.clientId) === targetClient && String(review.projectId) === payload.projectId);
+    const livePermissions = {
+      addKnowledgeSource: platformAdmin || scopedRole.includes("knowledge_admin"),
+      createKnowledgeRecord: scopedRole.includes("knowledge_admin"),
+      reviseKnowledgeRecord: scopedRole.includes("knowledge_admin"),
+      decideReview: Boolean(assignedReview),
+      requestPlanApproval: Boolean(actionRun && scopedRole.some((role) => ["approver", "marketing_operator"].includes(role))),
+      savePostDraft: Boolean(actionRun && data.posts.some((item) => item.id === payload.postId && item.runId === actionRun.id) &&
+        scopedRole.some((role) => ["approver", "marketing_operator"].includes(role))),
+      cancelRun: Boolean(actionRun && (platformAdmin || scopedRole.some((role) => ["approver", "marketing_operator"].includes(role)))),
+    };
     if (requireSignIn && (
       (payload.runId !== undefined && !actionRun) ||
       (!platformAdmin && payload.clientId != null && payload.clientId !== targetClient) ||
-      !canPerformAction(session, targetClient, name, actionRun)
+      (name === "saveBrief" && !data.projects.some(({ id, clientId }) => id === payload.projectId && clientId === targetClient)) ||
+      !(data.liveAccess && Object.hasOwn(livePermissions, name)
+        ? livePermissions[name] : canPerformAction(session, targetClient, name, actionRun))
     )) throw new Error("You do not have permission to perform this action.");
-    const scopedClient = name === "loadAudit" && platformAdmin
+    const scopedClient = name === "loadAudit" && platformAdmin && !brandAudit
       ? undefined
       : !requireSignIn || platformAdmin ? payload.clientId ?? targetClient : targetClient;
-    const result = await store.dispatch(name, { ...payload, clientId: scopedClient });
+    const result = await store.dispatch(name, { ...payload, clientId: scopedClient,
+      projectId: actionRun?.projectId ?? payload.projectId });
+    if (data.liveAccess && ["decideReview", "cancelRun", "requestPlanApproval", "savePostDraft"].includes(name)) {
+      await store.dispatch("refreshApprovals");
+      if (name === "decideReview") {
+        const request = assignedReview.contentItemId
+          ? ["loadPostDetail", { projectId: payload.projectId, postId: String(assignedReview.contentItemId) }]
+          : ["loadRunDetail", { projectId: payload.projectId, runId: String(assignedReview.runId) }];
+        try {
+          await store.dispatch(...request);
+        } catch {
+          setDetailError("The decision was saved. Reload to refresh this record.");
+        }
+      }
+    }
+    if (name === "signIn" && payload.reauthenticate && result?.redirectUrl)
+      sessionStorage.setItem("b2b-review-return", window.location.hash);
     if (result?.redirectUrl) followAuthRedirect(result.redirectUrl);
     if (name === "signOut" && result !== false) navigate("sign-in");
     return result;
-  }, [store, client?.id, data.runs, requireSignIn, session, platformAdmin]);
+  }, [store, client?.id, data, requireSignIn, session, platformAdmin, brandAudit]);
 
   if (page === "sign-in" || (requireSignIn && !signedIn)) {
     return (
@@ -136,6 +205,23 @@ export function B2BAgents({
       </div>
     );
   }
+  const logout = signedIn && <LogoutButton action={action} />;
+  const profileHref = signedIn ? workflowHref("profile") : undefined;
+  if (page === "my-brands") {
+    return brandsAllowed ? (
+      <MyBrands
+        clients={clients}
+        data={data}
+        session={session}
+        href={(target, id, parameters) => allowed(target, id) ? workflowHref(target, { client: id, ...parameters }) : undefined}
+        peopleHref={platformAdmin ? workflowHref("users") : undefined}
+        approvalsHref={approvalsHref}
+        logout={logout}
+        profileHref={profileHref}
+        adminHref={platformAdmin ? workflowHref("overview") : undefined}
+      />
+    ) : <p role="alert">My brands is unavailable for this account.</p>;
+  }
   const onClientChange = (id) => {
     const target = ["plan", "post"].includes(page) ? "runs" : page;
     navigate(allowed(target, id) ? target : landing(id) ?? "home", { client: id });
@@ -145,12 +231,14 @@ export function B2BAgents({
       <AdminApp
         page={page}
         onRedirect={followAuthRedirect}
+        logout={logout}
+        profileHref={profileHref}
         selectedClientId={client?.id}
         scopedClients={requireSignIn ? clients : undefined}
         onClientChange={requireSignIn ? onClientChange : undefined}
         canOpen={allowed}
         readOnly={!knowledgeEditor}
-        scopedAudit={requireSignIn && !platformAdmin}
+        scopedAudit={brandAudit || (requireSignIn && !platformAdmin)}
         onAction={requireSignIn ? action : undefined}
         store={store}
         onKnowledgePublished={(clientId) => navigate(requireSignIn ? landing(clientId) ?? "home" : "home", { client: clientId })}
@@ -164,22 +252,31 @@ export function B2BAgents({
   }
 
   const view = page;
-  const Screen = screens[view] ?? OperatorHome;
+  const showSetup = pageAllowed && !data.liveAccess && view === "new-run" && !params.has("run") &&
+    needsFirstRunSetup(client, data.readiness.find((report) => report.clientId === client?.id));
+  const liveScreen = data.liveAccess && { approvals: LiveApprovals, plan: LivePlan, post: LivePost }[view];
+  const Screen = showSetup ? OperatorHome : liveScreen || (screens[view] ?? OperatorHome);
   const clientHref = (target, parameters) => allowed(target) ? workflowHref(target, { client: client?.id, ...parameters }) : undefined;
   const clientNavigate = (target, parameters) => navigate(target, { client: client?.id, ...parameters });
   return (
     <WorkflowShell
-      page={view}
+      logout={logout}
+      page={showSetup ? "home" : view}
       data={data}
       clients={clients}
       client={client}
       onClientChange={onClientChange}
-      href={clientHref}
+      href={(target, parameters) => target === "approvals"
+        ? clientHref(target, parameters) ?? approvalsHref
+        : clientHref(target, parameters)}
+      brandsHref={brandsAllowed ? workflowHref("my-brands") : undefined}
     >
+      {detailError && <p role="alert">{detailError}</p>}
       {pageAllowed ? <Screen
         key={[view, client?.id, run?.id, post?.id].join(":")}
         data={data}
         client={client}
+        showSetup={showSetup}
         run={run}
         post={post}
         action={action}
@@ -187,7 +284,10 @@ export function B2BAgents({
         navigate={clientNavigate}
         preview={preview}
         readOnly={view === "knowledge" && !knowledgeEditor}
-        canAct={(name, targetRun = run) => !requireSignIn || canPerformAction(session, client?.id, name, targetRun)}
+        canAct={(name, targetRun = run) => !requireSignIn ||
+          (data.liveAccess && name === "cancelRun"
+            ? Boolean(targetRun && (platformAdmin || rolesForClient(session, client?.id).some((role) => ["approver", "marketing_operator"].includes(role))))
+            : (!data.liveAccess || name === "saveBrief") && canPerformAction(session, client?.id, name, targetRun))}
         link={(file) => ({
           href: clientHref(file === "RecordReview.dc.html" ? "records" : "setup"),
         })}
@@ -207,11 +307,42 @@ if (mount && authApiPath) {
     try {
       const auth = createAuthServices(authApiPath);
       const data = await auth.readSession();
+      if (new URLSearchParams(window.location.search).has("accessReauthenticated")) {
+        const returnHash = sessionStorage.getItem("b2b-review-return");
+        sessionStorage.removeItem("b2b-review-return");
+        if (returnHash && /^#(?:plan|post)\?/.test(returnHash)) {
+          const url = new URL(window.location.href);
+          url.searchParams.delete("accessReauthenticated");
+          url.hash = returnHash;
+          window.history.replaceState(null, "", url);
+        }
+      }
       if (data.session?.status === "active") {
         try {
           data.clients = await auth.readClients();
         } catch {
           data.clientsLoadError = "Could not load clients.";
+        }
+        const knowledge = await Promise.all((data.clients ?? []).filter((brand) => !brand.archived)
+          .map(async (brand) => {
+            const [result, details] = await Promise.all([
+              auth.services.readBrandKnowledge(brand.id, {
+              sources: canOpenPage(data.session, brand.id, "setup"),
+              records: canOpenPage(data.session, brand.id, "records"),
+              }),
+              auth.services.readBrand(brand.id).catch(() => null),
+            ]);
+            if (details) Object.assign(brand, details);
+            if (result.version != null) brand.knowledgeVersion = result.version;
+            return result;
+          }));
+        for (const key of ["readiness", "uploads", "records"])
+          data[key] = knowledge.flatMap((result) => result[key]);
+        data.brandKnowledgeLoadError = knowledge.some((result) => result.failed);
+        try {
+          data.reviewDecisions = (await auth.services.loadApprovals()).reviewDecisions;
+        } catch (error) {
+          data.approvalsLoadError = error.message;
         }
         if (isPlatformAdmin(data.session)) {
           try {
@@ -222,6 +353,22 @@ if (mount && authApiPath) {
         }
       }
       data.liveAccess = true;
+      if (data.session?.status === "active") {
+        const workflow = await Promise.allSettled((data.clients ?? []).filter((brand) => !brand.archived)
+          .map((brand) => auth.services.readBrandWorkflow(brand.id)));
+        const loaded = workflow.filter((result) => result.status === "fulfilled").map((result) => result.value);
+        for (const key of ["projects", "briefs", "runs", "posts"])
+          data[key] = loaded.flatMap((result) => result[key]);
+        const versions = await Promise.allSettled(data.projects.filter(({ clientId }) =>
+          canOpenPage(data.session, clientId, "records")).map(async ({ id, clientId }) => {
+          const versions = await auth.services.loadKnowledgeVersions({ projectId: id });
+          return versions.map((version) => ({ ...version, clientId, projectId: id }));
+        }));
+        data.projectKnowledgeVersions = versions.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+        data.knowledgeVersionsLoadError = versions.some((result) => result.status === "rejected");
+        if (workflow.some((result) => result.status === "rejected"))
+          data.workflowLoadError = "Some workflow records could not be loaded. Reload the app to retry.";
+      }
       const store = createAdminStore(data, auth.services);
       root.render(
         <B2BAgents

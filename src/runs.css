@@ -1,0 +1,48 @@
+.runs-list {
+  flex: 1;
+  background: #f4efe6;
+  color: #142821;
+}
+
+.runs-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.runs-list > .card {
+  padding: 0;
+  overflow: hidden;
+  border-color: #e8e1d6;
+  border-radius: 10px;
+}
+
+.runs-list .admin-table {
+  overflow-x: auto;
+}
+
+.runs-list .admin-table table {
+  min-width: 690px;
+}
+
+.runs-list .admin-table td {
+  vertical-align: middle;
+}
+
+.runs-list .btn.pri {
+  background: #19493b;
+  border-color: #19493b;
+  color: #fff;
+}
+
+.runs-progress {
+  display: grid;
+  gap: 4px;
+  color: #59635d;
+}
+
+.runs-progress progress {
+  width: 100%;
+  height: 6px;
+  accent-color: #19493b;
+}

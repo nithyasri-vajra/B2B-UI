@@ -1,5 +1,6 @@
 const collections = [
   "clients",
+  "projects",
   "users",
   "runs",
   "briefs",
@@ -68,6 +69,8 @@ export function createAdminStore(initial = {}, services = {}, prepareSnapshot = 
     if (patch.integrations)
       next.integrations = { ...data.integrations, ...patch.integrations };
     if ("session" in patch) next.session = patch.session;
+    if ("reviewDecisions" in patch) next.reviewDecisions = patch.reviewDecisions;
+    if ("approvalsLoadError" in patch) next.approvalsLoadError = patch.approvalsLoadError;
     publish(next);
   }
 
@@ -117,9 +120,9 @@ export function createAdminStore(initial = {}, services = {}, prepareSnapshot = 
       if (result?.data) ingest(result.data);
       return result;
     }
-    if (external.has(name))
+    if (data.liveAccess || external.has(name))
       throw new Error(
-        "Connect this action to the app service before using it.",
+        data.liveAccess ? "This action is unavailable on the connected backend." : "Connect this action to the app service before using it.",
       );
     const client = data.clients.find((item) => item.id === payload.clientId);
     const user = data.users.find((item) => item.email === payload.email);

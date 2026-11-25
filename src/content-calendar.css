@@ -1,0 +1,49 @@
+.content-calendar {
+  flex: 1;
+  min-width: 0;
+  background: #f4efe6;
+  color: #142821;
+}
+
+.content-calendar > .card {
+  min-width: 0;
+  border-color: #e8e1d6;
+  border-radius: 10px;
+}
+
+.content-calendar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.content-calendar-legend span::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 5px;
+  border-radius: 2px;
+  background: var(--status-color, #817662);
+}
+
+.content-calendar [data-status="Live"] { --status-color: #24704f; }
+.content-calendar [data-status="Scheduled"] { --status-color: #19493b; }
+.content-calendar [data-status="Awaiting approval"] { --status-color: #315c99; }
+.content-calendar [data-status="Blocked"] { --status-color: #a63830; }
+
+.content-calendar .workflow-calendar-day {
+  border-color: #e8e1d6;
+  border-radius: 7px;
+}
+
+.content-calendar .workflow-calendar-day[aria-current="date"] {
+  border-color: #19493b;
+}
+
+.content-calendar .workflow-calendar-post {
+  border-left: 3px solid var(--status-color, #817662);
+  background: #f8f5ef;
+  overflow-wrap: anywhere;
+}

@@ -83,6 +83,8 @@ function exportCSV(entries) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+import "./activity-people.css";
+
 export function AuditLog({ data, action, client, scopedAudit }) {
   const [remote, setRemote] = useState({ rows: [], nextOffset: null, loading: true });
   const [offset, setOffset] = useState(0);
@@ -102,6 +104,7 @@ export function AuditLog({ data, action, client, scopedAudit }) {
     actor: "All",
     action: "All",
     date: "",
+    range: scopedAudit ? "All time" : "7 days",
   });
   const set = (key, value) =>
     setFilters((current) => ({ ...current, [key]: value }));
@@ -129,6 +132,8 @@ export function AuditLog({ data, action, client, scopedAudit }) {
   const matching = events
     .filter(
       (event) =>
+        (!scopedAudit || (client && event.clientIds.includes(client.id))) &&
+        (filters.range === "All time" || Date.parse(event.timestamp) >= Date.now() - Number.parseInt(filters.range, 10) * 86400000) &&
         (!filters.date || event.date === filters.date) &&
         (filters.client === "All" || event.clientIds.includes(filters.client)) &&
         (filters.actor === "All" || event.actor === filters.actor) &&
@@ -148,9 +153,10 @@ export function AuditLog({ data, action, client, scopedAudit }) {
     ]);
   return (
     <Page
-      title="Audit log"
-      description={scopedAudit ? client?.name : "Platform Admin · activity across all clients"}
-      actions={
+      className={"activity-people-screen" + (scopedAudit ? "" : " platform-audit-screen")}
+      title={scopedAudit ? "Activity log" : "Audit log"}
+      description={scopedAudit ? client?.name : "Read-only activity across all brands."}
+      actions={!scopedAudit &&
         <Button
           primary
           disabled={!matching.length}
@@ -163,13 +169,13 @@ export function AuditLog({ data, action, client, scopedAudit }) {
       <Card>
         {remote.error && <p role="alert">{remote.error}</p>}
         <div className="admin-actions">
-          {!scopedAudit && <Field label="Client">
+          {!scopedAudit && <Field label="Brand">
             <select
-              aria-label="Client filter"
+              aria-label="Brand filter"
               value={filters.client}
               onChange={(event) => set("client", event.target.value)}
             >
-              <option>All</option>
+              <option value="All">All brands</option>
               {data.clients.map((client) => (
                 <option key={client.id} value={client.id}>
                   {client.name}
@@ -195,6 +201,8 @@ export function AuditLog({ data, action, client, scopedAudit }) {
             value={filters.action}
             onChange={(value) => set("action", value)}
           />
+          <Select label="Date range" options={["All time", "7 days", "30 days", "90 days"]}
+            value={filters.range} onChange={(value) => set("range", value)} />
           <Field label="Date (IST)">
             <input
               type="date"
@@ -205,8 +213,17 @@ export function AuditLog({ data, action, client, scopedAudit }) {
         </div>
         
         <Table
-          headers={headers}
-          rows={matching}
+          headers={["When", ...(!scopedAudit ? ["Brand"] : []), "Who", "What", "Details"]}
+          rows={matching.map(([when, brand, actor, action, object, before, after, ip, device]) => [
+            when, ...(!scopedAudit ? [brand] : []), actor,
+            <span className={scopedAudit ? undefined : "platform-audit-action"}>{action}</span>,
+            <details><summary>{object}</summary>
+              <dl className="activity-details">
+                <dt>Brand</dt><dd>{brand}</dd><dt>Before</dt><dd>{before}</dd>
+                <dt>After</dt><dd>{after}</dd><dt>IP</dt><dd>{ip}</dd><dt>Device</dt><dd>{device}</dd>
+              </dl>
+            </details>,
+          ])}
           empty={data.liveAccess && remote.loading ? "Loading audit events…" : "No audit events match these filters."}
         />
         {data.liveAccess && <div className="admin-actions">

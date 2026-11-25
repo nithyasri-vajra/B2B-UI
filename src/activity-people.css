@@ -1,0 +1,39 @@
+.activity-people-screen {
+  flex: 1;
+  min-width: 0;
+  background: #f4efe6;
+  color: #142821;
+}
+
+.activity-people-screen .card {
+  min-width: 0;
+  border-color: #e8e1d6;
+  border-radius: 10px;
+}
+
+.activity-people-screen .admin-table { overflow-x: auto; }
+.activity-people-screen .btn.pri { background: #19493b; border-color: #19493b; color: #fff; }
+.activity-people-screen summary { cursor: pointer; }
+.activity-details { display: grid; grid-template-columns: auto 1fr; gap: 4px 9px; }
+.activity-details dd { margin: 0; overflow-wrap: anywhere; }
+.platform-audit-screen .admin-actions { flex-wrap: wrap; }
+.platform-audit-screen .btn.pri { background: #fff; border-color: #e8e1d6; color: #19493b; }
+.platform-audit-action {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #f0ebe2;
+  color: #142821;
+}
+.people-role-legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; }
+
+.person-access-controls { display: grid; gap: 14px; min-width: 0; }
+.person-access-form > .admin-actions { grid-column: 1 / -1; justify-content: flex-end; }
+
+@media (min-width: 1000px) {
+  .person-access-form {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    align-items: start;
+  }
+}

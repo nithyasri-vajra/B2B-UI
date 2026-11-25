@@ -1,8 +1,8 @@
 const clientPages = {
-  knowledge_admin: ["home", "runs", "post", "calendar", "setup", "records", "knowledge", "readiness", "audit"],
-  approver: ["home", "new-run", "runs", "approvals", "plan", "post", "calendar", "audit", "records", "knowledge", "readiness"],
+  knowledge_admin: ["home", "runs", "plan", "post", "calendar", "setup", "records", "knowledge", "readiness", "audit"],
+  approver: ["home", "new-run", "runs", "approvals", "plan", "post", "calendar", "records", "knowledge", "readiness"],
   marketing_operator: ["home", "new-run", "runs", "approvals", "plan", "post", "calendar", "records", "knowledge", "readiness"],
-  viewer: ["home", "runs", "post", "calendar", "readiness"],
+  viewer: ["home", "runs", "plan", "post", "calendar", "knowledge", "readiness"],
 };
 
 const platformPages = [
@@ -49,7 +49,9 @@ export const hasAccess = (session) =>
     .some((assignment) => rolesForClient(session, assignment?.clientId).length > 0);
 
 export function canOpenPage(session, clientId, page) {
-  const adminClientPages = ["home", "runs", "post", "calendar", "records", "knowledge", "readiness", "setup"];
+  if (page === "profile") return hasAccess(session);
+  if (page === "outputs") return clientId != null && (isPlatformAdmin(session) || rolesForClient(session, clientId).length > 0);
+  const adminClientPages = ["home", "runs", "plan", "post", "calendar", "records", "knowledge", "readiness", "setup"];
   return (isPlatformAdmin(session) && platformPages.includes(page)) ||
     (isPlatformAdmin(session) && clientId != null && adminClientPages.includes(page)) ||
     rolesForClient(session, clientId).some((role) => clientPages[role].includes(page));
@@ -78,6 +80,7 @@ export function canPerformAction(session, clientId, name, run, { separation = fa
   const owner = Boolean(session?.email && typeof ownerEmail === "string" &&
     ownerEmail.toLowerCase() === session.email.toLowerCase());
   const ownRun = operator && owner;
+  if (name === "saveBrief") return operator || approver;
   if (name === "uploadSources" || name === "saveKnowledgeSetup")
     return admin || roles.includes("knowledge_admin");
   if (knowledgeActions.includes(name)) return roles.includes("knowledge_admin");
@@ -90,6 +93,8 @@ export function canPerformAction(session, clientId, name, run, { separation = fa
     return Boolean(run && (admin || approver || ownRun));
   if (name === "editPlanItem" || name === "replaceBrief")
     return Boolean(run && (approver || ownRun));
+  if (name === "commentOnPost") return Boolean(run && (approver || operator));
+  if (name === "answerRunQuestion") return Boolean(run && (approver || ownRun));
   if (approvalActions.includes(name)) return Boolean(run && approver);
   if (runOwnerActions.includes(name)) return ownRun;
   return operatorActions.includes(name) && (approver || (operator && (!run || owner)));

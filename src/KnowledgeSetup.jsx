@@ -2,8 +2,14 @@ import { useRef, useState } from "react";
 import { Button, Card, Chip, Page, useAction } from "./AdminControls";
 
 import { knowledgeFiles } from "./extractKnowledgeRecords";
+import "./knowledge-sources-records.css";
+import { LiveSources } from "./LiveKnowledge";
 
-export default function KnowledgeSetup({
+export default function KnowledgeSetup(props) {
+  return props.data.liveAccess ? <LiveSources {...props} /> : <PreviewKnowledgeSetup {...props} />;
+}
+
+function PreviewKnowledgeSetup({
   link,
   action,
   onFiles,
@@ -24,7 +30,7 @@ export default function KnowledgeSetup({
   const uploads = data.uploads.filter((item) => item.clientId === client?.id);
   const readiness = data.readiness.find((item) => item.clientId === client?.id);
   const isUploadingFolder = folderUpload?.active ?? false;
-  const controlsBusy = busy || isUploadingFolder;
+  const controlsBusy = busy || isUploadingFolder || data.liveAccess;
   const currentFolder = folderUpload?.clientId === client?.id ? folderUpload : null;
   const fileStatuses = knowledgeFiles.map(({ name }) => {
     const savedUpload = uploads.findLast((item) => item.name?.toLowerCase() === name);
@@ -117,7 +123,8 @@ export default function KnowledgeSetup({
 
   return (
     <Page
-      title={"Knowledge setup" + (client ? " · " + client.name : "")}
+      className="knowledge-readiness knowledge-sources-screen"
+      title="Knowledge"
       description="Upload and review sources for the selected client."
       actions={
         <>
@@ -133,12 +140,18 @@ export default function KnowledgeSetup({
         </>
       }
     >
+      <nav className="knowledge-readiness-tabs" aria-label="Knowledge sections">
+        <a {...link("Readiness.dc.html")}>Readiness</a>
+        <span aria-current="page">Sources</span>
+        <a {...link("RecordReview.dc.html")}>Records</a>
+      </nav>
       {!client && (
         <p className="muted">
           <a {...link("#new-client")}>Create a client</a> to enable folder uploads.
         </p>
       )}
-      <div
+      {data.liveAccess && <p role="status">Knowledge source uploads are unavailable on the connected backend.</p>}
+      <div className="knowledge-source-layout"
         style={{
           display: "flex",
           flexWrap: "wrap",
@@ -191,13 +204,13 @@ export default function KnowledgeSetup({
           />
           <button
             type="button"
-            className="ph"
+            className="knowledge-source-drop"
             style={{ minHeight: 72, background: "#fff" }}
             disabled={!client || controlsBusy}
             onClick={() => picker.current.click()}
           >
-            Drop files anywhere · MD, PDF, DOCX, PPTX, XLSX, CSV, TXT/VTT
-            transcripts, images
+            <strong>Drop files here or browse</strong>
+            <span>MD, PDF, DOCX, PPTX, XLSX, CSV, TXT/VTT transcripts and images</span>
           </button>
           <input
             ref={picker}
@@ -239,7 +252,7 @@ export default function KnowledgeSetup({
                 (id) => readiness?.domains?.find((item) => item.id === id)?.items ?? [],
               );
               return (
-                <Card key={name} title={name}>
+                <Card key={name} title={name.replace(/\.md$/i, "")}>
                   {items.map((item) => (
                       <p key={item.id}>
                         {item.level} · {item.name} <Chip>{item.status}</Chip>

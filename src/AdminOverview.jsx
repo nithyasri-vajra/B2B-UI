@@ -1,4 +1,5 @@
-import { Card, Chip, Page, Table } from "./AdminControls";
+import { Card, Page, Table } from "./AdminControls";
+import "./brand-settings.css";
 
 export default function AdminOverview({ link, clients, data }) {
   const pending = data.users.filter(
@@ -10,82 +11,68 @@ export default function AdminOverview({ link, clients, data }) {
     .sort((a, b) => (b.timestamp ?? "").localeCompare(a.timestamp ?? ""))
     .slice(0, 5);
 
+  const month = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric", month: "2-digit", timeZone: "Asia/Kolkata",
+  });
+  const currentMonth = month.format(new Date());
+  const thisMonth = (value) => Number.isFinite(Date.parse(value)) && month.format(new Date(value)) === currentMonth;
+  const runs = data.runs.filter((run) => thisMonth(run.startedAt));
+  const live = data.posts.filter((post) =>
+    ["Live", "Verified", "Published", "Published (unverified)"].includes(post.status) && thisMonth(post.publishedAt),
+  );
   return (
     <Page
-      title="Admin overview"
+      className="brand-settings-screen"
+      title="Platform overview"
       description="Platform Admin · all clients"
       actions={
         <a className="btn pri" {...link("#new-client")}>
-          Create client
+          + Create brand space
         </a>
       }
     >
-      <div className="admin-grid">
-        <Card title="Clients by readiness">
-          <div className="admin-actions">
-            {[
-              ["Green", "g"],
-              ["Amber", "a"],
-              ["Red", "r"],
-            ].map(([band, tone]) => (
-              <Chip key={band} tone={tone}>
-                {band}{" "}
-                {
-                  clients.filter(
-                    (client) => readings.get(client.id)?.band === band,
-                  ).length
-                }
-              </Chip>
-            ))}
-          </div>
-        </Card>
-        <Card title="Access requests">
-          <strong>{pending}</strong>
-          <a {...link("#access-requests")}>Assign roles</a>
-        </Card>
-        <Card title="Knowledge reviews due">
-          <strong>{reviews}</strong>
-          <a {...link("RecordReview.dc.html")}>Open records</a>
-        </Card>
-        <Card title="Agent health">
-          <p>
-            {data.runs.length
-              ? "Runs: " +
-                data.runs.filter((run) => run.status === "Completed").length +
-                " completed · " +
-                data.runs.filter((run) => run.status === "Failed").length +
-                " failed"
-              : "No runs yet."}
-          </p>
-        </Card>
+      {data.clientsLoadError && <p role="alert">{data.clientsLoadError}</p>}
+      {data.usersLoadError && <p role="alert">{data.usersLoadError}</p>}
+      <div className="platform-overview-stats">
+        <Card title="Brands"><strong>{clients.length}</strong><a {...link("#clients")}>Manage brand spaces</a></Card>
+        <Card title="People"><strong>{data.users.length}</strong><a {...link("#access-requests")}>{pending} waiting for access</a></Card>
+        <Card title="Runs this month"><strong>{runs.length}</strong><span>{runs.filter((run) => run.status === "Failed").length} failed</span></Card>
+        <Card title="Posts live this month"><strong>{live.length}</strong></Card>
       </div>
-      <Card title="Clients">
+      <div className="brand-spaces-layout">
+      <Card title="Brands">
         <Table
           headers={[
-            "Client",
-            "Channels",
+            "Brand",
+            "Channel",
+            "Brand Manager",
+            "People",
             "Readiness",
             "Knowledge",
             "Approver / backup",
             "Last run",
+            "Status",
           ]}
           rows={clients.map((client) => [
             <strong>{client.name}</strong>,
             client.channel ?? "—",
-            readings.get(client.id)?.band ?? "—",
-            client.knowledge ?? "—",
+            data.users.filter((user) => user.assignments?.[client.id]?.includes("Knowledge Admin"))
+              .map((user) => user.name ?? user.email).join(", ") || "Unassigned",
+            data.users.filter((user) => user.assignments?.[client.id]?.length).length,
+            readings.get(client.id)?.score ?? readings.get(client.id)?.band ?? "-",
+            client.knowledge ?? client.knowledgeVersion ?? "-",
             (client.approver ?? "—") + " / " + (client.backup ?? "—"),
             [...data.runs]
               .filter((run) => run.clientId === client.id)
               .map((run) => run.startedAt ?? "")
               .sort()
               .at(-1) || "—",
+            client.status ?? "Active",
           ])}
           empty="No clients yet. Create a client to begin."
         />
-        <a {...link("#clients")}>Open clients</a>
+        <a {...link("#clients")}>Manage brand spaces</a>
       </Card>
-      <div className="admin-grid">
         <Card title="Needs attention">
           {data.notifications.length ? (
             data.notifications.map((item) => (
@@ -94,7 +81,9 @@ export default function AdminOverview({ link, clients, data }) {
           ) : (
             <p className="muted">Nothing needs attention.</p>
           )}
+          {reviews > 0 && <a {...link("RecordReview.dc.html")}>{reviews} knowledge records to review</a>}
         </Card>
+      </div>
         <Card title="Recent activity">
           {recent.length ? (
             recent.map((item) => (
@@ -107,7 +96,6 @@ export default function AdminOverview({ link, clients, data }) {
           )}
           <a {...link("AuditLog.dc.html")}>Open audit log</a>
         </Card>
-      </div>
     </Page>
   );
 }

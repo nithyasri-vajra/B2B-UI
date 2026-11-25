@@ -1,0 +1,38 @@
+.review-screen {
+  flex: 1;
+  min-width: 0;
+  background: #f4efe6;
+  color: #142821;
+}
+
+.review-screen .card {
+  min-width: 0;
+  border-color: #e8e1d6;
+  border-radius: 10px;
+}
+
+.review-screen .btn.gate,
+.review-screen .btn.pri {
+  background: #19493b;
+  border-color: #19493b;
+  color: #fff;
+}
+
+.plan-review-summary {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 164px), 1fr));
+}
+
+.plan-review-summary strong { font-size: 24px; }
+.plan-review-summary span { font-size: 12px; }
+.review-screen .admin-table { overflow-x: auto; }
+.output-review .workflow-preview { border-color: #e8e1d6; }
+
+@media (min-width: 950px) {
+  .output-review .output-review-columns {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}

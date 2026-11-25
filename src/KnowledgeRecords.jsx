@@ -10,6 +10,8 @@ import {
   Tabs,
   useAction,
 } from "./AdminControls";
+import "./knowledge-sources-records.css";
+import { NewKnowledgeRecord, ReviseKnowledgeRecord } from "./LiveKnowledge";
 
 const states = [
   "Captured",
@@ -23,6 +25,7 @@ const views = ["Records", "Change proposals"];
 const decisions = ["Keep A", "Keep B", "Keep both with scope", "Escalate"];
 
 export function Records({ action, data, client, link, readOnly = false }) {
+  const canEdit = !readOnly && !data.liveAccess;
   const [view, setView] = useState(views[0]);
   const records = client
     ? data.records.filter((item) => item.clientId === client.id)
@@ -30,7 +33,9 @@ export function Records({ action, data, client, link, readOnly = false }) {
   const proposals = client
     ? data.proposals.filter((item) => item.clientId === client.id)
     : [];
+  const versions = client ? (data.projectKnowledgeVersions ?? []).filter((version) => version.clientId === client.id) : [];
   const [filters, setFilters] = useState({});
+  const [query, setQuery] = useState("");
   const [id, setId] = useState(null);
   const [draft, setDraft] = useState(null);
   const [conflict, setConflict] = useState(false);
@@ -55,7 +60,10 @@ export function Records({ action, data, client, link, readOnly = false }) {
         ([key]) =>
           !filters[key] || filters[key] === "All" || item[key] === filters[key],
       ) &&
-      (!filters.review || item.review),
+      (!filters.review || item.review) &&
+      [item.id, item.item, item.title, item.quote, item.source].some(
+        (value) => String(value ?? "").toLowerCase().includes(query.trim().toLowerCase()),
+      ),
   );
 
   function update(name, values) {
@@ -64,16 +72,37 @@ export function Records({ action, data, client, link, readOnly = false }) {
 
   return (
     <Page
-      title="Knowledge records"
-      actions={link && <a className="btn" {...link("Readiness.dc.html")}>Open readiness</a>}
+      className="knowledge-readiness knowledge-records-screen"
+      title="Knowledge"
       description={
         client?.name ?? "Select a client to review knowledge records."
       }
     >
-      <Tabs values={views} value={view} onChange={setView} />
+      <nav className="knowledge-readiness-tabs" aria-label="Knowledge sections">
+        {link && <a {...link("Readiness.dc.html")}>Readiness</a>}
+        {link && !readOnly && <a {...link("KnowledgeSetup.dc.html")}>Sources</a>}
+        <span aria-current="page">Records</span>
+      </nav>
+      {!data.liveAccess && <Tabs values={views} value={view} onChange={setView} />}
+      {data.brandKnowledgeLoadError && <p role="alert">Some knowledge data could not be loaded. Reload to retry.</p>}
+      {data.liveAccess && !readOnly && client && <NewKnowledgeRecord
+        sources={data.uploads.filter((row) => row.clientId === client.id)} action={action} />}
+      {data.liveAccess && versions.length > 0 && <Card title="Project knowledge versions">
+        {data.knowledgeVersionsLoadError && <p role="alert">Some project knowledge versions could not be loaded.</p>}
+        <Table headers={["Project", "Version", "Status"]}
+          rows={versions.map((version) => [
+            data.projects.find(({ id }) => id === version.projectId)?.name ?? "Project",
+            version.version ?? version.name ?? "—", version.status ?? "—",
+          ])}
+          empty="No project knowledge versions available."
+        />
+      </Card>}
+      <div className="knowledge-records-layout" data-detail-open={Boolean(record && view === "Records")}>
       {view === "Records" ? (
         <Card>
           <div className="admin-actions">
+            <input className="knowledge-record-search" type="search" aria-label="Search statements"
+              placeholder="Search statements" value={query} onChange={(event) => setQuery(event.target.value)} />
             {fields.map(([key, label, options]) => (
               <Select
                 key={key}
@@ -156,7 +185,7 @@ export function Records({ action, data, client, link, readOnly = false }) {
               proposal.materiality ?? "—",
               proposal.affectedPosts?.join(", ") || "—",
               <Chip>{proposal.status ?? "Pending review"}</Chip>,
-              !readOnly && <div className="admin-actions">
+              canEdit && <div className="admin-actions">
                 {[
                   ["Approve", "Approved"],
                   ["Reject", "Rejected"],
@@ -193,7 +222,7 @@ export function Records({ action, data, client, link, readOnly = false }) {
           <header className="knowledge-record-header">
             <div>
               <h2 id="knowledge-record-title">
-                {isFileRecord ? record.source : record.id}
+                {isFileRecord ? record.source.replace(/\.md$/i, "") : record.title ?? record.item ?? record.id}
                 {record.version && " · " + record.version}
               </h2>
               <div className="knowledge-record-meta">
@@ -205,6 +234,7 @@ export function Records({ action, data, client, link, readOnly = false }) {
             <Button onClick={() => setId(null)}>Close</Button>
           </header>
           <div className="knowledge-record-body">
+            {data.liveAccess && !readOnly && <ReviseKnowledgeRecord key={record.id + ":" + record.currentRevision} record={record} action={action} />}
             {draft ? (
               <form
                 className="admin-form"
@@ -284,7 +314,7 @@ export function Records({ action, data, client, link, readOnly = false }) {
                     {record.history?.join(" · ") || "No history yet."}
                   </p>
                 </div>
-                {!readOnly && <div className="admin-actions">
+                {canEdit && <div className="admin-actions">
                   <Button
                     primary
                     disabled={
@@ -400,6 +430,7 @@ export function Records({ action, data, client, link, readOnly = false }) {
         </aside>
       )}
       {(!record || view !== "Records") && feedback}
+      </div>
     </Page>
   );
 }

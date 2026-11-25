@@ -46,6 +46,8 @@ export default function AdminApp({
   hrefFor = (file, targetPage) => (targetPage ? "#" + targetPage : file),
   onAction,
   onRedirect,
+  logout,
+  profileHref,
   onKnowledgePublished,
   selectedClientId,
   scopedClients,
@@ -100,21 +102,9 @@ export default function AdminApp({
     <div className="b2b-admin">
       <div className="app">
         <nav className="side" aria-label="Main">
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "10px",
-              padding: "4px 12px 16px",
-            }}
-          >
-            <div
-              className="ph"
-              style={{ width: "28px", height: "28px", fontSize: "10px" }}
-            >
-              V
-            </div>
-            <strong style={{ fontSize: "15px" }}>B2B Agents</strong>
+          <div className="app-brand-label">
+            <span className="app-brand-mark" aria-hidden="true">▼</span>
+            <strong>B2B Agents</strong>
           </div>
           {[
             ["Main.dc.html", "home", "Home"],
@@ -186,6 +176,8 @@ export default function AdminApp({
                 </p>
               </div>
             </div>
+            {profileHref && <a className="btn" href={profileHref}>My profile</a>}
+            {logout}
           </header>
           {showNotifications && (
             <section className="card" aria-label="Notifications">

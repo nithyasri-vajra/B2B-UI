@@ -1,0 +1,48 @@
+.knowledge-sources-screen .knowledge-source-drop {
+  display: grid;
+  justify-items: start;
+  gap: 5px;
+  width: 100%;
+  padding: 14px;
+  color: #19493b;
+  border: 1px dashed #b8c6bc;
+  border-radius: 8px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.knowledge-source-drop span { color: #59635d; font-size: 12px; }
+.knowledge-source-drop:disabled { cursor: default; }
+
+.knowledge-record-search {
+  align-self: end;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid #e8e1d6;
+  border-radius: 7px;
+  font: inherit;
+}
+
+.knowledge-records-screen .admin-actions {
+  flex-wrap: wrap;
+}
+
+.knowledge-records-layout {
+  display: grid;
+  gap: 14px;
+  align-items: start;
+}
+
+@media (min-width: 1100px) {
+  .knowledge-records-layout[data-detail-open="true"] {
+    grid-template-columns: minmax(0, 2fr) minmax(275px, 1fr);
+  }
+
+  .knowledge-records-layout .knowledge-record-drawer {
+    position: static;
+    width: auto;
+    max-height: none;
+    box-shadow: none;
+  }
+}

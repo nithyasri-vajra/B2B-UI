@@ -106,7 +106,8 @@ export default function PostReview({ data, client, run, post, href, action, canA
   }
   return (
     <Page
-      title={"Gate 2 · " + (post.title ?? post.id)}
+      className="review-screen output-review"
+      title={post.title ?? post.id}
       description={[
         client.name,
         run.period,
@@ -116,6 +117,7 @@ export default function PostReview({ data, client, run, post, href, action, canA
         .join(" · ")}
       actions={
         <>
+          <Chip tone="b">Gate 2</Chip>
           <Chip tone="b">{post.status}</Chip>
           {post.qaStatus && <Chip>{post.qaStatus}</Chip>}
         </>
@@ -145,8 +147,8 @@ export default function PostReview({ data, client, run, post, href, action, canA
           )}
         </div>
       </div>
-      <div className="workflow-columns">
-        <Card title="LinkedIn preview">
+      <div className="workflow-columns output-review-columns">
+        <Card title="Preview">
           <Tabs
             values={["Desktop", "Mobile"]}
             value={size}
@@ -288,6 +290,7 @@ export default function PostReview({ data, client, run, post, href, action, canA
           </>}
         </Card>
       </div>
+      {data.liveAccess && <p role="status">Draft editing, approval decisions and LinkedIn publishing are unavailable on the connected backend.</p>}
       {feedback}
       <section className="card workflow-foot">
         <div className="admin-row">

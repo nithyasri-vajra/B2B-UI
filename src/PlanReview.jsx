@@ -10,6 +10,7 @@ import {
   useAction,
 } from "./AdminControls";
 import { WorkflowLink } from "./OperatorHome";
+import "./review-screens.css";
 
 export function ReviewDialog({ title, onClose, children }) {
   const dialog = useRef(null);
@@ -70,7 +71,8 @@ function PreviewPlanReview({ run, href, action }) {
 
   return (
     <Page
-      title="Gate 1 · Approve content plan"
+      className="review-screen"
+      title="Approve content plan · Gate 1"
       description={run.period}
       actions={<WorkflowLink href={href("runs", { run: run.id })}>Back to run</WorkflowLink>}
     >
@@ -182,7 +184,8 @@ function PlanItemReview({ data, client, run, href, action, canAct = () => true }
   }
   return (
     <Page
-      title="Gate 1 · Approve content plan"
+      className="review-screen"
+      title="Approve content plan · Gate 1"
       description={
         run
           ? [client.name, run.period, run.status].filter(Boolean).join(" · ")
@@ -194,17 +197,21 @@ function PlanItemReview({ data, client, run, href, action, canAct = () => true }
         </WorkflowLink>
       }
     >
-      {run?.pillarCoverage?.length > 0 && (
-        <Card title="Coverage">
+      {run && <div className="plan-review-summary" aria-label="Plan summary">
+        <Card title="Posts"><strong>{items.length}</strong><span>{reviewable.length} awaiting approval</span></Card>
+        <Card title="Pillar mix">
           <div className="admin-actions">
-            {run.pillarCoverage.map((item) => (
+            {run.pillarCoverage?.map((item) => (
               <Chip key={item.pillar}>
                 {item.pillar} · {item.actual} / {item.target}
               </Chip>
             ))}
           </div>
+          {!run.pillarCoverage?.length && <span>{new Set(items.map(({ pillar }) => pillar).filter(Boolean)).size} pillars</span>}
         </Card>
-      )}
+        <Card title="Key dates"><strong>{items.filter(({ scheduledAt }) => scheduledAt).length}</strong><span>posts with a scheduled date</span></Card>
+        <Card title="Evidence"><strong>{items.filter(({ proof }) => !proof?.length).length}</strong><span>posts without linked evidence</span></Card>
+      </div>}
       <Card title="Plan items">
         <div className="admin-row">
           <Tabs

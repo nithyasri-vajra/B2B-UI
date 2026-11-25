@@ -109,15 +109,17 @@ function EditAccess({ user, clients, clientName, action, onClose, onSave, client
 
   return (
     <Page
-      title={(user.status === "Pending role" ? "Assign access · " : "Edit access · ") + user.name}
+      className="activity-people-screen person-access-screen"
+      title={user.name || user.email}
       description={[user.email, user.status, user.last && "Last sign-in " + user.last].filter(Boolean).join(" · ")}
-      actions={<Button onClick={onClose}>Back</Button>}
+      actions={<Button onClick={onClose}>Back to People</Button>}
     >
       {saveNotice && <p role="status">{saveNotice.message}</p>}
-      <form className="admin-form" onSubmit={save}>
+      <form className="admin-form person-access-form" onSubmit={save}>
+        <div className="person-access-controls">
         {user.note && <Card title="Request note"><p>{user.note}</p></Card>}
-        <Card title="Client roles">
-          <p className="muted">Select a role for each client this user should access.</p>
+        <Card title="Roles in your brands">
+          <p className="muted">Select the roles this person should hold in each brand.</p>
           {clientsError && (
             <div>
               <p role="alert">{clientsError}</p>
@@ -130,7 +132,7 @@ function EditAccess({ user, clients, clientName, action, onClose, onSave, client
           )}
           <Table
             empty="No clients available to assign."
-            headers={["Client", ...roles.slice(1)]}
+            headers={["Brand", ...brandRoleBadges.map(([, label]) => label)]}
             rows={clients.map((client) => [
               clientName(client),
               ...roles
@@ -181,7 +183,8 @@ function EditAccess({ user, clients, clientName, action, onClose, onSave, client
             </>
           )}
         </Card>
-        <Card title="Access summary">
+        </div>
+        <Card title="What this person can do">
           <ul>
             {effectiveRoles.length ? (
               effectiveRoles.map((role) => (
@@ -223,6 +226,10 @@ function EditAccess({ user, clients, clientName, action, onClose, onSave, client
   );
 }
 
+import "./activity-people.css";
+
+const brandRoleBadges = [["Knowledge Admin", "Brand Manager", "BM"], ["Approver", "Approver", "AP"], ["Marketing Operator", "Operator", "OP"], ["Viewer", "Viewer", "VW"]];
+
 export function Users({
   action,
   showRequests,
@@ -233,7 +240,7 @@ export function Users({
   const clients = availableClients.map((client) => client.id);
   const clientName = (id) =>
     availableClients.find((client) => client.id === id)?.name ?? id;
-  const [view, setView] = useState(showRequests ? "Access requests" : "Users");
+  const [view, setView] = useState(showRequests ? "Access requests" : "People");
   const [editing, setEditing] = useState(null);
   const [usersError, setUsersError] = useState(data.usersLoadError);
   const [usersLoading, setUsersLoading] = useState(false);
@@ -308,12 +315,13 @@ export function Users({
     );
   return (
     <Page
-      title="Users and roles"
+      className="activity-people-screen"
+      title="People"
       description="Platform Admin · Google Workspace access"
       actions={
-        view === "Users" && (
+        ["People", "Users"].includes(view) && (
           <Button primary disabled={usersLoading || busy} onClick={() => setPreAdd(!preAdd)}>
-            Pre-add email
+            {view === "People" ? "Add person to brands" : "Pre-add email"}
           </Button>
         )
       }
@@ -328,11 +336,11 @@ export function Users({
         </Button>
       )}
       <Tabs
-        values={["Users", "Access requests", "Roles reference"]}
+        values={["People", "Users", "Access requests", "Roles reference"]}
         value={view}
         onChange={setView}
       />
-      {view === "Users" && (
+      {["People", "Users"].includes(view) && (
         <>
           {preAdd && (
             <Card title="Pre-add a Google Workspace account">
@@ -427,7 +435,24 @@ export function Users({
                 onChange={(value) => set("status", value)}
               />
             </div>
-            <Table
+            {view === "People" ? <>
+              <div className="people-role-legend">
+                {brandRoleBadges.map(([role, label, badge]) => <span key={role}><Chip>{badge}</Chip> {label}</span>)}
+              </div>
+              <Table headers={["Person", ...availableClients.map(({ name }) => name)]}
+                rows={filtered.map((user) => [
+                  <div>
+                    <Button disabled={busy || usersLoading} onClick={() => setEditing(user)}>{user.name || user.email}</Button>
+                    <div className="muted">{user.email === data.session?.email ? "You" : user.status}</div>
+                  </div>,
+                  ...clients.map((id) => {
+                    const badges = brandRoleBadges.filter(([role]) => user.assignments?.[id]?.includes(role));
+                    return badges.length ? badges.map(([role, label, badge]) => <span key={role} title={label}><Chip>{badge}</Chip>{" "}</span>) : "—";
+                  }),
+                ])}
+                empty="No people match these filters."
+              />
+            </> : <Table
               headers={[
                 "Name",
                 "Email",
@@ -485,7 +510,7 @@ export function Users({
                 </div>,
               ])}
               empty="No users match these filters."
-            />
+            />}
           </Card>
         </>
       )}

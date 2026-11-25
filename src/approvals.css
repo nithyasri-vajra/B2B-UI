@@ -1,0 +1,32 @@
+.my-approvals {
+  min-height: 100%;
+  box-sizing: border-box;
+  background: #f4efe6;
+  color: #142821;
+}
+
+.my-approvals .card {
+  min-width: 0;
+  border-color: #e8e1d6;
+  border-radius: 10px;
+}
+
+.my-approvals .btn.pri {
+  background: #19493b;
+  border-color: #19493b;
+  color: #fff;
+}
+
+.my-approvals .admin-table {
+  overflow-x: auto;
+}
+
+.my-approvals th,
+.my-approvals td {
+  vertical-align: middle;
+}
+
+.my-approvals .tabon {
+  color: #19493b;
+  border-bottom-color: #19493b;
+}

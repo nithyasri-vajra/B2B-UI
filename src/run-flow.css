@@ -1,0 +1,76 @@
+.new-run-screen,
+.run-detail-screen {
+  flex: 1;
+  min-width: 0;
+  background: #f4efe6;
+  color: #142821;
+}
+
+.new-run-screen .card,
+.run-detail-screen .card {
+  min-width: 0;
+  border-color: #e8e1d6;
+  border-radius: 10px;
+}
+
+.new-run-screen .btn.pri,
+.run-detail-screen .btn.pri {
+  background: #19493b;
+  border-color: #19493b;
+  color: #fff;
+}
+
+.new-run-screen .new-run-agent {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  width: min(100%, 230px);
+  box-sizing: border-box;
+  padding: 14px;
+  border: 1px solid #19493b;
+  border-radius: 8px;
+  background: #eef5f0;
+}
+
+.new-run-screen .new-run-agent p {
+  margin: 0;
+}
+
+.new-run-screen .new-run-validation-actions {
+  flex-direction: column-reverse;
+  align-items: stretch;
+}
+
+.run-detail-screen .run-pipeline {
+  padding: 12px;
+  border: 1px solid #e8e1d6;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.run-detail-screen .run-pipeline > li {
+  border-width: 2px 0 0;
+  border-radius: 0;
+  border-top-color: #b9d0c3;
+}
+
+.run-detail-screen .workflow-notice {
+  background: #fff0ed;
+  border-color: #ebc7bf;
+}
+
+.run-detail-screen .admin-table {
+  overflow-x: auto;
+}
+
+@media (min-width: 1024px) {
+  .new-run-screen .new-run-layout {
+    grid-template-columns: minmax(0, 2fr) minmax(245px, 1fr);
+  }
+
+  .run-detail-screen .workflow-columns {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(245px, 1fr);
+    align-items: start;
+  }
+}

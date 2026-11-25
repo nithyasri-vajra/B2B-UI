@@ -12,6 +12,73 @@ import {
 import { configuredAgent, pipeline, WorkflowLink } from "./OperatorHome";
 import { PreviewDraftResults } from "./PlanReview";
 import SkillResult from "./SkillResult";
+import "./runs.css";
+import "./run-flow.css";
+
+const runDate = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric", month: "short", timeZone: "Asia/Kolkata",
+});
+const runOwner = (run) => run.ownerName ?? run.owner ?? run.ownerEmail;
+const runTones = { Completed: "g", Failed: "r", Blocked: "r", "Awaiting Gate 1": "b", "Awaiting Gate 2": "b" };
+
+function RunsList({ data, client, href }) {
+  const [agent, setAgent] = useState("");
+  const [status, setStatus] = useState("");
+  const [owner, setOwner] = useState("");
+  const runs = data.runs.filter((item) => item.clientId === client?.id && client);
+  const agents = [...new Set(runs.map(({ agentId }) => agentId).filter(Boolean))];
+  const statuses = [...new Set(runs.map(({ status }) => status).filter(Boolean))].sort();
+  const owners = [...new Set(runs.map(runOwner).filter(Boolean))].sort();
+  const shown = runs.filter((run) => (!agent || run.agentId === agent) &&
+    (!status || run.status === status) && (!owner || runOwner(run) === owner))
+    .sort((a, b) => (Date.parse(b.startedAt) || 0) - (Date.parse(a.startedAt) || 0));
+  const agentLabel = (id) => configuredAgent(data, id)?.name ?? id;
+  return (
+    <Page className="runs-list" title="Runs"
+      description={client ? `Every agent run for ${client.name}.` : "Select a brand to view its runs."}
+      actions={<WorkflowLink href={href("new-run")} primary>+ New run</WorkflowLink>}>
+      {data.workflowLoadError && <p role="alert">{data.workflowLoadError}</p>}
+      <div className="runs-filters">
+        <select aria-label="Filter by agent" value={agent} onChange={(event) => setAgent(event.target.value)}>
+          <option value="">All agents</option>
+          {agents.map((id) => <option key={id} value={id}>{agentLabel(id)}</option>)}
+        </select>
+        <select aria-label="Filter by status" value={status} onChange={(event) => setStatus(event.target.value)}>
+          <option value="">All statuses</option>
+          {statuses.map((value) => <option key={value}>{value}</option>)}
+        </select>
+        <select aria-label="Filter by starter" value={owner} onChange={(event) => setOwner(event.target.value)}>
+          <option value="">Anyone</option>
+          {owners.map((value) => <option key={value}>{value}</option>)}
+        </select>
+      </div>
+      <Card>
+        <Table headers={["Run", "Agent", "Status", "Progress", "Started by", "Started", "Knowledge", ""]}
+          rows={shown.map((item) => {
+            const brief = data.briefs.find(({ id, clientId }) => id === item.briefId && clientId === client.id);
+            const version = item.briefVersion ?? brief?.version;
+            const progress = item.status === "Completed" ? 100 : item.progressPercent;
+            const started = Date.parse(item.startedAt);
+            return { key: item.id, cells: [
+              <div><strong>{item.name ?? item.period ?? item.id}</strong><div className="muted">{item.id}{version != null && ` · brief v${version}`}</div></div>,
+              agentLabel(item.agentId) ?? "—",
+              <Chip tone={runTones[item.status]}>{item.status ?? "—"}</Chip>,
+              <div className="runs-progress">
+                {Number.isFinite(progress) && <progress aria-label="Run progress" value={progress} max={100} />}
+                <span>{item.progressLabel ?? item.currentStep ?? (item.status === "Completed" ? "Completed" : "—")}</span>
+              </div>,
+              runOwner(item) ?? "—",
+              Number.isFinite(started) ? runDate.format(started) : "—",
+              item.knowledgeVersion == null ? "—" : typeof item.knowledgeVersion === "number" ? `v${item.knowledgeVersion}` : item.knowledgeVersion,
+              <WorkflowLink href={href("runs", { run: item.id })}>Open</WorkflowLink>,
+            ] };
+          })}
+          empty={runs.length ? "No runs match these filters." : "No runs yet."}
+        />
+      </Card>
+    </Page>
+  );
+}
 
 function RunPipeline({ run, agent, planning }) {
   const qualification = run.qualificationResult;
@@ -59,35 +126,8 @@ export default function RunWorkspace({ data, client, run, href, action, preview,
       if (name === "planContent") setPlanningRunId(null);
     }
   });
-  const runs = client
-    ? data.runs.filter((item) => item.clientId === client.id)
-    : [];
   if (!run)
-    return (
-      <Page
-        title="Runs"
-        description={client?.name}
-        actions={
-          <WorkflowLink href={href("new-run")} primary>
-            New run
-          </WorkflowLink>
-        }
-      >
-        <Card>
-          <Table
-            headers={["Run", "Period", "Status", "Owner", ""]}
-            rows={runs.map((item) => [
-              item.name ?? item.id,
-              item.period ?? "—",
-              <Chip>{item.status}</Chip>,
-              item.owner ?? "—",
-              <a href={href("runs", { run: item.id })}>Open run</a>,
-            ])}
-            empty="No runs yet."
-          />
-        </Card>
-      </Page>
-    );
+    return <RunsList data={data} client={client} href={href} />;
   const posts = data.posts.filter(
     (item) => item.clientId === client.id && item.runId === run.id,
   );
@@ -99,12 +139,10 @@ export default function RunWorkspace({ data, client, run, href, action, preview,
   const planning = run.planningResult;
   const agent = configuredAgent(data, run.agentId);
   const planningNow = planningRunId === run.id;
-  const showPipeline = planningNow || Boolean(planning || run.gate1 || run.stages?.some(
-    (stage, index) => index > 0 && stage.status && stage.status !== "Pending",
-  ));
   const canPlan = ["READY", "LIMITED"].includes(qualification?.verdict)
     && (!planning?.planner || planning.planner.verdict === "BLOCKED");
-  const canChange = canAct("cancelRun") && !run.qualificationResult && !["Completed", "Cancelled", "Failed"].includes(run.status);
+  const canChange = canAct("cancelRun") && (data.liveAccess || !run.qualificationResult) &&
+    !["completed", "cancelled", "failed", "publishing"].includes(String(run.status).toLowerCase());
   const selectedQuestion = questions.find(
     (item) => item.id === questionId && !item.answer,
   );
@@ -115,24 +153,32 @@ export default function RunWorkspace({ data, client, run, href, action, preview,
 
   return (
     <Page
+      className="run-detail-screen"
       title={run.name ?? [agent?.name ?? "Agent run", run.period ?? run.id].join(" / ")}
-      description={[run.owner, run.startedAt].filter(Boolean).join(" · ")}
+      description={[agent?.name, run.id, runOwner(run), run.startedAt, run.knowledgeVersion != null && `Knowledge ${run.knowledgeVersion}`, run.briefVersion != null && `Brief v${run.briefVersion}`].filter(Boolean).join(" · ")}
       actions={
         <>
           <Chip tone="b">{run.status}</Chip>
           {canChange && (
             <>
-              <WorkflowLink href={href("new-run", { run: run.id })}>
+              {!data.liveAccess && <WorkflowLink href={href("new-run", { run: run.id })}>
                 Replace brief
-              </WorkflowLink>
+              </WorkflowLink>}
               <Button onClick={() => setCancel(true)}>Cancel run</Button>
             </>
           )}
         </>
       }
     >
-      <a href={href("runs")}>All runs</a>
-      {showPipeline && <RunPipeline run={run} agent={agent} planning={planningNow} />}
+      <a href={href("runs")}>← Runs</a>
+      {data.liveAccess ? <Card title="Run stages">
+        <Table headers={["Stage", "Status", "Finished"]}
+          rows={(run.stageExecutions ?? []).map((stage) => [stage.stageKey, stage.status, stage.finishedAt ?? "-"])}
+          empty="No stage executions are recorded for this run." />
+      </Card> : <RunPipeline run={run} agent={agent} planning={planningNow} />}
+      {data.liveAccess && run.planRevisions?.length > 0 && <Card title="Content plan">
+        <WorkflowLink href={href("plan", { run: run.id })} gate>Open plan review</WorkflowLink>
+      </Card>}
       {run.qualificationResult && (
         <Card title="Brief qualification">
           {run.qualificationResult.error && <p role="alert">{run.qualificationResult.error}</p>}
@@ -258,13 +304,15 @@ export default function RunWorkspace({ data, client, run, href, action, preview,
             </div>
           </div>
           <Table
-            headers={["Post", "Pillar", "Scheduled", "Status"]}
-            rows={posts.map((item) => [
+            headers={["#", "Publishes", "Pillar", "Post", "QA", "Status"]}
+            rows={posts.map((item, index) => [
+              index + 1,
+              item.scheduledAt ?? "-",
+              item.pillar ?? "-",
               href("post") ? <a href={href("post", { run: run.id, post: item.id })}>
                 {item.title}
               </a> : item.title,
-              item.pillar ?? "—",
-              item.scheduledAt ?? "—",
+              item.qaStatus ?? "-",
               <Chip>{item.status}</Chip>,
             ])}
             empty="Posts will appear here when the agent produces them."

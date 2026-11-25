@@ -1,0 +1,104 @@
+.my-brands {
+  display: grid;
+  grid-template-columns: clamp(175px, 17vw, 240px) minmax(0, 1fr);
+  min-height: 100vh;
+  background: #f4efe6;
+  color: #142821;
+}
+.my-brands-sidebar, .my-brands-toolbar {
+  background: #fff;
+}
+.my-brands-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px 14px;
+  border-right: 1px solid #e8e1d6;
+}
+.my-brands-logo span {
+  margin-right: 8px;
+  color: #a17c23;
+}
+.my-brands nav { display: grid; gap: 4px; }
+.my-brands nav a, .my-brands nav summary {
+  display: block;
+  padding: 9px 12px;
+  border-radius: 7px;
+  color: inherit;
+  font-size: 13px;
+  text-decoration: none;
+}
+.my-brands nav summary { cursor: pointer; }
+.my-brands nav summary span { float: right; }
+.my-brands nav details a { padding-left: 24px; }
+.my-brands nav a[aria-current], .my-brands nav a:hover { background: #e5eee9; }
+.my-brands-profile { display: flex; align-items: center; gap: 8px; margin-top: auto; overflow-wrap: anywhere; }
+.my-brands-profile small { display: block; }
+.my-brands-profile > span, .my-brand-avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  background: #19493b;
+  color: #fff;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.my-brands-profile > span { background: #82651c; border-radius: 50%; }
+.my-brands-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 56px;
+  padding: 0 clamp(16px, 2.4vw, 36px);
+  font-size: 12px;
+}
+.my-brands-toolbar input, .my-brands select {
+  max-width: 100%;
+  min-height: 35px;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  border: 1px solid #ded6c9;
+  border-radius: 7px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+}
+.my-brands-toolbar input { width: min(230px, 50%); }
+.my-brands-main { padding: 25px clamp(16px, 2.4vw, 36px); }
+.my-brands-heading { display: flex; justify-content: space-between; align-items: start; gap: 12px; margin-bottom: 18px; }
+.my-brands-heading h1 { margin: 0; font-size: 23px; }
+.my-brands-heading p { margin: 5px 0 0; font-size: 12px; }
+.my-brands-heading select { font-size: 12px; }
+.my-brands-stats, .my-brands-grid { display: grid; gap: 16px; }
+.my-brands-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 16px; }
+.my-brands-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.my-brands-stats > div, .my-brand-card { background: #fff; border: 1px solid #e8e1d6; border-radius: 11px; padding: 16px; }
+.my-brands-stats span, .my-brands-stats small, .my-brand-card dt, .my-brands-profile small { color: #5c655f; font-size: 11px; }
+.my-brands-stats strong, .my-brands-stats small { display: block; }
+.my-brands-stats strong { font-size: 24px; }
+.my-brand-card-heading { display: flex; flex-wrap: wrap; align-items: start; gap: 8px; }
+.my-brand-card h2 { margin: 0 0 4px; font-size: 15px; overflow-wrap: anywhere; }
+.my-brand-card h2 a { color: inherit; text-decoration: none; }
+.my-brand-card h2 a:hover { text-decoration: underline; }
+.my-brand-role, .my-brand-readiness { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 11px; }
+.my-brand-role { margin-right: 4px; background: #f4ebd5; color: #654c1b; }
+.my-brand-readiness { background: #e1efe7; color: #19493b; }
+.my-brand-card dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 13px 0; }
+.my-brand-card dd { margin: 0; font-size: 12px; font-weight: 600; }
+.my-brand-card footer { padding-top: 10px; border-top: 1px solid #eee9df; font-size: 11px; color: #66501e; }
+.my-brands :focus-visible { outline: 2px solid #19493b; outline-offset: 2px; }
+@media (max-width: 1000px) {
+  .my-brands-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 700px) {
+  .my-brands { grid-template-columns: minmax(0, 1fr); }
+  .my-brands-sidebar { border-right: 0; }
+  .my-brands-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 440px) {
+  .my-brands-grid { grid-template-columns: minmax(0, 1fr); }
+}

@@ -9,18 +9,46 @@ import {
   useAction,
 } from "./AdminControls";
 import { ReviewDialog } from "./PlanReview";
+import { canOpenPage, canPerformAction, isPlatformAdmin, rolesForClient } from "./access";
+import "./approvals.css";
 
-const tabs = ["Plans (Gate 1)", "Posts (Gate 2)", "Decided · last 30 days"];
+const tabs = ["Plans and outlines", "Outputs", "Decided"];
 
 export default function ApprovalsQueue({ data, client, href, action }) {
-  const [view, setView] = useState(tabs[0]);
+  const [view, setView] = useState(tabs[1]);
+  const [brand, setBrand] = useState("");
+  const [agent, setAgent] = useState("");
   const [selected, setSelected] = useState([]);
   const [confirm, setConfirm] = useState(false);
   const [reviewed, setReviewed] = useState("");
   const { submit, busy, feedback } = useAction(action);
-  const all = client
-    ? data.approvals.filter((item) => item.clientId === client.id)
-    : [];
+  const session = data.session;
+  const brands = data.clients.filter(({ id, archived }) => !archived && (
+    session?.status === "active" ? !isPlatformAdmin(session) &&
+      rolesForClient(session, id).some((role) => ["approver", "marketing_operator"].includes(role))
+      : id === client?.id
+  ));
+  const brandNames = new Map(brands.map(({ id, name }) => [id, name]));
+  const findRun = (item) => data.runs.find(({ id, clientId }) => id === item.runId && clientId === item.clientId);
+  const agentId = (item) => item.agentId ?? findRun(item)?.agentId;
+  const accessible = data.approvals.filter((item) => {
+    if (!brandNames.has(item.clientId) || ![1, 2].includes(item.gate)) return false;
+    if (session?.status !== "active") return true;
+    const run = findRun(item);
+    if (!run) return false;
+    return canPerformAction(session, item.clientId, item.gate === 1 ? "approvePlan" : "approvePost", run, { separation: run.separation === true });
+  });
+  const agents = [...new Set(accessible.map(agentId).filter(Boolean))];
+  const all = accessible.filter((item) => (!brand || item.clientId === brand) && (!agent || agentId(item) === agent));
+  function reviewHref(item) {
+    const target = item.gate === 1 ? "plan" : "post";
+    const ids = { run: item.runId, post: item.postId };
+    if (item.clientId === client?.id) return href(target, ids);
+    if (!canOpenPage(session, item.clientId, target)) return undefined;
+    const query = new URLSearchParams({ client: item.clientId, run: item.runId });
+    if (item.postId) query.set("post", item.postId);
+    return "#" + target + "?" + query;
+  }
   const plans = all.filter(
     (item) => item.gate === 1 && item.status === "Pending",
   );
@@ -47,10 +75,10 @@ export default function ApprovalsQueue({ data, client, href, action }) {
     const profile = data.integrations.linkedin?.profiles?.find(
       (profile) =>
         profile.id === post?.profileId &&
-        (!profile.clientId || profile.clientId === client?.id),
+        (!profile.clientId || profile.clientId === item.clientId),
     );
     const ready =
-      item.canApprove !== false &&
+      item.clientId === client?.id && item.canApprove !== false &&
       post?.status === "Awaiting approval" &&
       post.version != null &&
       post.scheduledAt &&
@@ -82,13 +110,23 @@ export default function ApprovalsQueue({ data, client, href, action }) {
   }
 
   return (
-    <Page title="Approvals" description={client?.name}>
+    <Page className="my-approvals" title="My approvals" description="Everything waiting for your decision across your brands and agents."
+      actions={<>
+        <select aria-label="Filter by brand" value={brand} onChange={(event) => { setBrand(event.target.value); setSelected([]); }}>
+          <option value="">All brands</option>
+          {brands.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
+        </select>
+        <select aria-label="Filter by agent" value={agent} onChange={(event) => { setAgent(event.target.value); setSelected([]); }}>
+          <option value="">All agents</option>
+          {agents.map((id) => <option key={id} value={id}>{data.agents.find((entry) => entry.id === id)?.name ?? id}</option>)}
+        </select>
+      </>}>
       <Card>
         <div className="admin-row">
           <Tabs
             values={[
-              tabs[0] + " · " + plans.length,
               tabs[1] + " · " + posts.length,
+              tabs[0] + " · " + plans.length,
               tabs[2],
             ]}
             value={
@@ -126,24 +164,24 @@ export default function ApprovalsQueue({ data, client, href, action }) {
         {view === tabs[1] && (
           <p className="muted">
             Batch approval requires posts from one run with a connected test
-            profile and a scheduled time.
+            profile and a scheduled time. To approve a batch, switch to its brand first.
           </p>
         )}
         <Table
           headers={[
             ...(view === tabs[1] ? ["Select"] : []),
-            "Item",
-            "Client · run",
-            "Due / publishes",
+            "Brand",
+            "Type",
+            "Output",
+            "Due",
+            "QA",
+            "Goes to",
             "Waiting since",
-            "Requested by",
-            "Status",
+            ...(view === tabs[2] ? ["Decision"] : []),
             "",
           ]}
           rows={list.map((item) => {
-            const run = data.runs.find(
-              (run) => run.id === item.runId && run.clientId === client?.id,
-            );
+            const run = findRun(item);
             const candidate = candidates.find((row) => row.item.id === item.id);
             const label =
               item.title ?? candidate?.post?.title ?? run?.name ?? item.id;
@@ -162,24 +200,15 @@ export default function ApprovalsQueue({ data, client, href, action }) {
                     />,
                   ]
                 : []),
-              label,
-              [client?.name, run?.name ?? run?.period]
-                .filter(Boolean)
-                .join(" · "),
+              brandNames.get(item.clientId),
+              <Chip>{item.type ?? (item.gate === 1 ? "Plan" : "LinkedIn post")}</Chip>,
+              <div><strong>{label}</strong><div className="muted">{data.agents.find(({ id }) => id === agentId(item))?.name}</div></div>,
               candidate?.post?.scheduledAt ?? item.dueAt ?? "—",
+              item.qaStatus ?? candidate?.post?.qaStatus ?? "-",
+              item.destination ?? candidate?.profile?.name ?? "-",
               item.waitingSince ?? "—",
-              item.requestedBy ?? "—",
-              <Chip tone={item.status === "Pending" ? "b" : undefined}>
-                {item.status}
-              </Chip>,
-              <a
-                href={href(item.gate === 1 ? "plan" : "post", {
-                  run: item.runId,
-                  post: item.postId,
-                })}
-              >
-                Review
-              </a>,
+              ...(view === tabs[2] ? [<Chip>{item.status}</Chip>] : []),
+              reviewHref(item) && <a className="btn pri" href={reviewHref(item)}>Review</a>,
             ];
           })}
           empty={
@@ -190,6 +219,14 @@ export default function ApprovalsQueue({ data, client, href, action }) {
         />
         {feedback}
       </Card>
+      {view === tabs[1] && plans.filter(reviewHref).map((item) => (
+        <Card key={item.id}>
+          <div className="admin-row">
+            <div><strong>Plan review requested</strong><p className="muted">{item.title ?? brandNames.get(item.clientId)}</p></div>
+            <a className="btn" href={reviewHref(item)}>Open plan</a>
+          </div>
+        </Card>
+      ))}
       {confirm && (
         <ReviewDialog
           title={"Approve " + chosen.length + " posts for publishing?"}

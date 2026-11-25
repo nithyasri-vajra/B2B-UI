@@ -1,9 +1,88 @@
 import { useRef, useState } from "react";
-import { Button, Card, Chip, Page, Table, useAction } from "./AdminControls";
+import { Button, Card, Chip, Field, Page, Table, useAction } from "./AdminControls";
 import { canStartRun, configuredAgent } from "./OperatorHome";
+import "./run-flow.css";
 import periodBriefTemplate from "./period-brief-template.xlsx?url";
 
-export default function NewRun({ data, client, run, href, navigate, action, preview }) {
+const briefFields = [
+  ["title", "Brief title"], ["period", "Period"], ["objective", "Objective"],
+  ["audience", "Audience"], ["deliverables", "Deliverables"], ["kpi", "KPI"],
+];
+
+function LiveBrief({ brief, projectId, action }) {
+  const revision = brief?.versions?.find(({ version }) => version === brief.currentVersion);
+  const [values, setValues] = useState(() => Object.fromEntries(briefFields.map(([key]) => {
+    const value = key === "title" ? brief?.title : revision?.[key];
+    return [key, value == null ? "" : typeof value === "string" ? value : JSON.stringify(value)];
+  })));
+  const { busy, submit, feedback } = useAction(action);
+  const [saved, setSaved] = useState(false);
+  return (
+    <form className="admin-form" onSubmit={async (event) => {
+      event.preventDefault();
+      setSaved(false);
+      const fields = Object.fromEntries(Object.entries(values).map(([key, value]) => [
+        key, value === (typeof revision?.[key] === "object" ? JSON.stringify(revision[key]) : undefined) ? revision[key] : value.trim(),
+      ]));
+      if (Object.values(fields).some((value) => value === "")) return;
+      await submit("saveBrief", { projectId, values: { ...fields,
+        ...(brief ? { briefId: brief.id, currentVersion: brief.currentVersion } : {}),
+      } }, () => setSaved(true));
+    }}>
+      {briefFields.map(([key, label]) => <Field key={key} label={label}>
+        <input required value={values[key]} onChange={(event) => setValues({ ...values, [key]: event.target.value })} />
+      </Field>)}
+      <Button primary type="submit" disabled={busy || saved || Boolean(brief && !revision)}>Save brief</Button>
+      {saved && <p role="status">Brief saved.</p>}
+      {brief && !revision && <p role="alert">The current revision is unavailable. Reload the app before editing.</p>}
+      {feedback}
+    </form>
+  );
+}
+
+function LiveNewRun({ data, client, run, href, action, canAct }) {
+  const projects = data.projects.filter(({ clientId }) => clientId === client?.id);
+  const [selected, setSelected] = useState(run?.projectId ?? projects[0]?.id ?? "");
+  const [briefId, setBriefId] = useState(run?.briefId ?? "");
+  const briefs = data.briefs.filter(({ projectId }) => projectId === selected);
+  const brief = briefs.find(({ id }) => id === briefId);
+  return (
+    <Page className="new-run-screen" title={run ? "Run brief" : "New run"}>
+      <a href={href("runs")}>← Runs</a>
+      {data.workflowLoadError && <p role="alert">{data.workflowLoadError}</p>}
+      <Card title="Period brief">
+        <p>Excel upload and automatic run execution are unavailable on the connected backend.</p>
+        {projects.length ? <Field label="Project">
+          <select value={selected} disabled={Boolean(run)} onChange={(event) => { setSelected(event.target.value); setBriefId(""); }}>
+            {projects.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
+          </select>
+        </Field> : <p>No projects are available for this brand.</p>}
+        {selected && !run && canAct("saveBrief") && <>
+          <Field label="Brief">
+            <select value={briefId} onChange={(event) => setBriefId(event.target.value)}>
+              <option value="">Create a brief</option>
+              {briefs.map(({ id, title }) => <option key={id} value={id}>{title}</option>)}
+            </select>
+          </Field>
+          <LiveBrief key={selected + ":" + briefId + ":" + (brief?.currentVersion ?? 0)} brief={brief}
+            projectId={selected} action={async (name, payload) => {
+              const result = await action(name, payload);
+              const savedBrief = result?.data?.briefs?.[0];
+              if (savedBrief) setBriefId(savedBrief.id);
+              return result;
+            }} />
+        </>}
+        {selected && (run || !canAct("saveBrief")) && <p>{brief?.title ?? "Brief editing is unavailable for this view."}</p>}
+      </Card>
+    </Page>
+  );
+}
+
+export default function NewRun(props) {
+  return props.data.liveAccess ? <LiveNewRun {...props} /> : <PreviewNewRun {...props} />;
+}
+
+function PreviewNewRun({ data, client, run, href, navigate, action, preview }) {
   const agent = configuredAgent(data, run ? run.agentId : client?.agentId);
   const templateUrl = agent?.briefTemplateUrl ?? data.integrations.briefTemplateUrl ?? periodBriefTemplate;
   const input = useRef(null);
@@ -36,7 +115,7 @@ export default function NewRun({ data, client, run, href, navigate, action, prev
   const ready =
     brief?.validated === true &&
     !issues.some((issue) => issue.severity === "Error");
-  const currentStep = ready && !blocked ? 2 : fileName ? 1 : 0;
+  const currentStep = fileName ? 2 : 1;
 
   function pick(file) {
     if (!file || busy || !client) return;
@@ -69,16 +148,13 @@ export default function NewRun({ data, client, run, href, navigate, action, prev
 
   return (
     <Page
-      className="workflow-setup-page"
-      title={run ? "Replace period brief" : agent?.name ?? "New agent run"}
-      actions={
-        <a className="btn" href={templateUrl} download={templateUrl === periodBriefTemplate ? "period-brief-template.xlsx" : true}>
-          Download period brief template (.xlsx)
-        </a>
-      }
+      className="workflow-setup-page new-run-screen"
+      title={run ? "Replace period brief" : "New run"}
+      description="Choose an agent, attach its brief and run."
     >
+      {href("runs") && <a href={href("runs")}>← Runs</a>}
       <ol className="new-run-steps" aria-label="Run setup steps">
-        {["Attach brief", "Check", "Run"].map((label, index) => (
+        {["Choose agent", "Attach brief", "Check and run"].map((label, index) => (
           <li
             key={label}
             className="step"
@@ -90,9 +166,19 @@ export default function NewRun({ data, client, run, href, navigate, action, prev
           </li>
         ))}
       </ol>
+      <Card title="Agent">
+        <div className="new-run-agent">
+          <strong>{agent?.name ?? "Agent workflow"}</strong>
+          {agent?.description && <p>{agent.description}</p>}
+          <Chip tone={blocked ? "a" : "g"}>{blocked ? "Readiness check required" : "Ready"}</Chip>
+        </div>
+      </Card>
       <div className="new-run-layout">
         <div className="new-run-setup">
-          <Card title="1 · Period brief (session context)">
+          <Card title={agent?.name ? "Brief · " + agent.name : "Period brief"}>
+            <a href={templateUrl} download={templateUrl === periodBriefTemplate ? "period-brief-template.xlsx" : true}>
+              Download brief template (.xlsx)
+            </a>
             <button
               className="ph workflow-drop"
               type="button"
@@ -139,7 +225,25 @@ export default function NewRun({ data, client, run, href, navigate, action, prev
               </div>
             )}
           </Card>
-          <Card title="Validation">
+        <Card title="From your brief">
+          <div
+            className="new-run-brief-details"
+            role="region"
+            aria-label="Brief details table"
+            tabIndex={0}
+          >
+            <Table
+              headers={["Field", "Value"]}
+              rows={Object.entries(brief?.fields ?? {}).map(([key, value]) => [
+                key,
+                Array.isArray(value) ? value.join(", ") : String(value ?? "-"),
+              ])}
+              empty="No brief details to display."
+            />
+          </div>
+        </Card>
+        </div>
+          <Card title="Before you run">
             {fileError && <p role="alert">{fileError}</p>}
             {issues.length ? (
               issues.map((issue, i) => (
@@ -240,24 +344,7 @@ export default function NewRun({ data, client, run, href, navigate, action, prev
             {busy && ready && <p role="status">Running the skills. Keep this page open.</p>}
             {feedback}
           </Card>
-        </div>
-        <Card title="What we read from the brief">
-          <div
-            className="new-run-brief-details"
-            role="region"
-            aria-label="Brief details table"
-            tabIndex={0}
-          >
-            <Table
-              headers={["Field", "Value"]}
-              rows={Object.entries(brief?.fields ?? {}).map(([key, value]) => [
-                key,
-                Array.isArray(value) ? value.join(", ") : String(value ?? "-"),
-              ])}
-              empty="No brief details to display."
-            />
-          </div>
-        </Card>
+
       </div>
     </Page>
   );
