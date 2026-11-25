@@ -158,9 +158,9 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
         confirmPlatformAdmin: confirmed === true,
       });
     },
-    async preAddUser({ email }) {
-      return changeAccess({ action: "pre_add", email });
-    },
+   async preAddUser({ email }) {
+  return saveAccess({ action: "pre_add", email });
+},
     async suspendUser({ email }) {
       return changeAccess({ action: "suspend", email });
     },

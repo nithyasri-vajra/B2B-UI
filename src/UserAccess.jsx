@@ -79,7 +79,7 @@ function EditAccess({ user, clients, clientName, action, onClose, onSave, client
     const result = await action(name, payload);
     if (name === "saveUserAccess" && result && !result.redirectUrl) {
       if (result.refreshRequired) setAccessSaved(true);
-      else onSave();
+      else onSave(result.message || "User access saved.");
     }
     return result;
   });
@@ -107,7 +107,7 @@ function EditAccess({ user, clients, clientName, action, onClose, onSave, client
     };
     submit(
       "saveUserAccess",
-      { before: user, after, reason, confirmed, requiresStepUp: true },
+      { before: user, after, reason, confirmed },
     );
   }
 
@@ -261,6 +261,12 @@ export function Users({
   });
   const [preAdd, setPreAdd] = useState(false);
   const [email, setEmail] = useState("");
+  const [saveNotice, setSaveNotice] = useState(null);
+  useEffect(() => {
+    if (!saveNotice) return;
+    const timer = window.setTimeout(() => setSaveNotice(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [saveNotice]);
   const { submit, busy, feedback } = useAction(action);
   const workDomain = data.integrations.google?.domain;
   const set = (name, value) =>
@@ -288,7 +294,10 @@ export function Users({
         action={action}
         clientsLoadError={data.clientsLoadError && !availableClients.length ? data.clientsLoadError : null}
         onClose={() => setEditing(null)}
-        onSave={() => setEditing(null)}
+        onSave={(message) => {
+          setSaveNotice({ message });
+          setEditing(null);
+        }}
       />
     );
   return (
@@ -304,6 +313,7 @@ export function Users({
       }
     >
       {data.accessNotice && <p role="status">{data.accessNotice}</p>}
+      {saveNotice && <p role="status">{saveNotice.message}</p>}
       {usersError && <p role="alert">{usersError}</p>}
       {data.liveAccess && (
         <Button disabled={busy || usersLoading} onClick={() =>
