@@ -207,20 +207,7 @@ if (mount && authApiPath) {
     try {
       const auth = createAuthServices(authApiPath);
       const data = await auth.readSession();
-      let accessNotice;
       if (data.session?.status === "active") {
-        const query = new URLSearchParams(window.location.search);
-        if (query.has("accessReauthenticated") && isPlatformAdmin(data.session)) {
-          query.delete("accessReauthenticated");
-          history.replaceState(null, "", window.location.pathname +
-            (query.size ? "?" + query : "") + window.location.hash);
-          try {
-            const saved = await auth.resumeAccess();
-            accessNotice = saved?.message;
-          } catch (error) {
-            accessNotice = error.message;
-          }
-        }
         try {
           data.clients = await auth.readClients();
         } catch {
@@ -235,7 +222,6 @@ if (mount && authApiPath) {
         }
       }
       data.liveAccess = true;
-      data.accessNotice = accessNotice;
       const store = createAdminStore(data, auth.services);
       root.render(
         <B2BAgents

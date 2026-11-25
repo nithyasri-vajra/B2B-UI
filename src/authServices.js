@@ -1,5 +1,4 @@
 const sessionStatuses = new Set(["active", "pending", "denied", "expired"]);
-const accessDraftKey = "b2b.pending-user-access";
 const userStatuses = {
   active: "Active", pending: "Pending role", suspended: "Suspended",
   deactivated: "Deactivated in IdP",
@@ -93,31 +92,7 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
 
   async function saveAccess(payload) {
     const result = await call("/user-access", payload);
-    if (Array.isArray(result.data?.users) && result.data.users.length) {
-      return { ...result, data: { users: result.data.users.map(toAdminUser) } };
-    }
-    try {
-      return { ...result, data: { users: await readUsers() } };
-    } catch {
-      return { ...result, refreshRequired: true, message: "Access saved. Go back to refresh the users list." };
-    }
-  }
-
-  async function changeAccess(payload) {
-    try {
-      return await saveAccess(payload);
-    } catch (error) {
-      if (error.code !== "reauthentication_required") throw error;
-      const { redirectUrl } = await call("/sign-in", { reauthenticate: true });
-      sessionStorage.setItem(accessDraftKey, JSON.stringify(payload));
-      return { redirectUrl };
-    }
-  }
-
-  async function resumeAccess() {
-    const draft = sessionStorage.getItem(accessDraftKey);
-    sessionStorage.removeItem(accessDraftKey);
-    if (draft) return saveAccess(JSON.parse(draft));
+    return { ...result, data: { users: result.data.users.map(toAdminUser) } };
   }
 
   const services = {
@@ -148,7 +123,7 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
       return { data: { users: await readUsers() } };
     },
     async saveUserAccess({ after, reason, confirmed }) {
-      const result = await call("/user-access", {
+      return saveAccess({
         email: after.email,
         clientAssignments: Object.entries(after.assignments)
           .filter(([, roles]) => roles.length)
@@ -157,19 +132,21 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
         reason: reason.trim(),
         confirmPlatformAdmin: confirmed === true,
       });
-      return { ...result, data: { users: result.data.users.map(toAdminUser) } };
     },
-   async preAddUser({ email }) {
-  return saveAccess({ action: "pre_add", email });
-},
-    async suspendUser({ email }) {
-      return changeAccess({ action: "suspend", email });
+    async preAddUser({ email }) {
+      return saveAccess({ action: "pre_add", email });
+    },
+    async suspendUser({ email, confirmed }) {
+      return saveAccess({
+        action: "suspend", email, confirmPlatformAdmin: confirmed === true,
+        reason: confirmed ? "Suspended from Users and Roles." : "",
+      });
     },
     async removeUserFromClient({ email, client }) {
-      return changeAccess({ action: "remove_client", email, clientId: client });
+      return saveAccess({ action: "remove_client", email, clientId: client });
     },
     async declineAccessRequest({ email, reason }) {
-      return changeAccess({ action: "decline", email, reason });
+      return saveAccess({ action: "decline", email, reason });
     },
     async signIn({ chooseAccount = false } = {}) {
       const result = await call("/sign-in", { chooseAccount });
@@ -185,10 +162,9 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
 
     async signOut() {
       await call("/sign-out", {});
-      sessionStorage.removeItem(accessDraftKey);
       return { data: { session: null } };
     },
   };
 
-  return { readSession, readClients, resumeAccess, services };
+  return { readSession, readClients, services };
 }

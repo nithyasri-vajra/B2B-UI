@@ -66,7 +66,7 @@ const userClients = (user, clients) =>
     ? clients
     : clients.filter((client) => user.assignments?.[client]?.length);
 
-function EditAccess({ user, clients, clientName, action, onClose, onSave, clientsLoadError }) {
+function EditAccess({ user, clients, clientName, action, onClose, onSave, clientsLoadError, saveNotice }) {
   const [draft, setDraft] = useState({
     ...user,
     assignments: user.assignments ?? {},
@@ -113,6 +113,7 @@ function EditAccess({ user, clients, clientName, action, onClose, onSave, client
       description={[user.email, user.status, user.last && "Last sign-in " + user.last].filter(Boolean).join(" · ")}
       actions={<Button onClick={onClose}>Back</Button>}
     >
+      {saveNotice && <p role="status">{saveNotice.message}</p>}
       <form className="admin-form" onSubmit={save}>
         {user.note && <Card title="Request note"><p>{user.note}</p></Card>}
         <Card title="Client roles">
@@ -248,7 +249,7 @@ export function Users({
       if (current) setUsersLoading(false);
     });
     return () => { current = false; };
-  }, [action, data.liveAccess, view]);
+  }, [action, data.liveAccess]);
   const [filters, setFilters] = useState({
     search: "",
     role: "All",
@@ -263,7 +264,14 @@ export function Users({
     const timer = window.setTimeout(() => setSaveNotice(null), 4000);
     return () => window.clearTimeout(timer);
   }, [saveNotice]);
-  const { submit, busy, feedback } = useAction(action);
+  const { submit, busy, feedback } = useAction(async (name, payload) => {
+    const result = await action(name, payload);
+    if (result?.message && name !== "loadUsers") {
+      setSaveNotice({ message: result.message });
+      return { ...result, message: undefined };
+    }
+    return result;
+  });
   const workDomain = data.integrations.google?.domain;
   const set = (name, value) =>
     setFilters((current) => ({ ...current, [name]: value }));
@@ -288,11 +296,13 @@ export function Users({
         clients={clients}
         clientName={clientName}
         action={action}
+        saveNotice={saveNotice}
         clientsLoadError={data.clientsLoadError && !availableClients.length ? data.clientsLoadError : null}
         onClose={() => setEditing(null)}
         onSave={(message) => {
           setSaveNotice({ message });
           setEditing(null);
+          setView("Users");
         }}
       />
     );
@@ -302,13 +312,12 @@ export function Users({
       description="Platform Admin · Google Workspace access"
       actions={
         view === "Users" && (
-          <Button primary onClick={() => setPreAdd(!preAdd)}>
+          <Button primary disabled={usersLoading || busy} onClick={() => setPreAdd(!preAdd)}>
             Pre-add email
           </Button>
         )
       }
     >
-      {data.accessNotice && <p role="status">{data.accessNotice}</p>}
       {saveNotice && <p role="status">{saveNotice.message}</p>}
       {usersError && <p role="alert">{usersError}</p>}
       {data.liveAccess && (
@@ -376,7 +385,7 @@ export function Users({
                     }}
                   />
                 </Field>
-                <Button primary type="submit" disabled={busy}>
+                <Button primary type="submit" disabled={busy || usersLoading}>
                   Continue to assign access
                 </Button>
               </form>
@@ -441,13 +450,13 @@ export function Users({
                     "—",
                 user.last,
                 <div className="admin-actions">
-                  <Button onClick={() => setEditing(user)}>Edit access</Button>
+                  <Button disabled={busy || usersLoading} onClick={() => setEditing(user)}>Edit access</Button>
                   {user.status === "Active" && (
                     <Button
-                      disabled={busy}
+                      disabled={busy || usersLoading}
                       onClick={() => {
                         if (window.confirm("Suspend " + user.name + "?"))
-                          submit("suspendUser", { email: user.email });
+                          submit("suspendUser", { email: user.email, confirmed: user.global });
                       }}
                     >
                       Suspend
@@ -457,7 +466,7 @@ export function Users({
                     userClients(user, clients).map((client) => (
                       <Button
                         key={client}
-                        disabled={busy}
+                        disabled={busy || usersLoading}
                         onClick={() => {
                           if (
                             window.confirm(
@@ -467,7 +476,6 @@ export function Users({
                             submit("removeUserFromClient", {
                               email: user.email,
                               client,
-                              requiresStepUp: true,
                             });
                         }}
                       >
@@ -499,11 +507,11 @@ export function Users({
               user.requested ? clientName(user.requested) : "—",
               user.note ?? "—",
               <div className="admin-actions">
-                <Button onClick={() => setEditing(user)}>
+                <Button disabled={busy || usersLoading} onClick={() => setEditing(user)}>
                   Assign role and clients
                 </Button>
                 <Button
-                  disabled={busy}
+                  disabled={busy || usersLoading}
                   onClick={() => {
                     if (window.confirm("Decline this access request?"))
                       submit("declineAccessRequest", { email: user.email, reason: "Declined from access requests." });
