@@ -38,13 +38,15 @@ export function LiveApprovals({ data }) {
   </Page>;
 }
 
-function Decision({ review, action }) {
+function Decision({ review, action, onSaved }) {
   const [decision, setDecision] = useState("approved");
   const [reason, setReason] = useState("");
   const [stepUp, setStepUp] = useState(false);
   const { submit, busy, feedback } = useAction(async (name, values) => {
     try {
-      return await action(name, values);
+      const result = await action(name, values);
+      if (name === "decideReview" && result) onSaved(result.message);
+      return result;
     } catch (error) {
       if (error.code === "reauthentication_required") {
         setStepUp(true);
@@ -72,6 +74,7 @@ function Decision({ review, action }) {
 }
 
 export function LivePlan({ run, data, client, action, href }) {
+  const [decisionNotice, setDecisionNotice] = useState("");
   const [selected, setSelected] = useState([]);
   const [askApprover, setAskApprover] = useState(false);
   const { submit, busy, feedback } = useAction(action);
@@ -85,6 +88,7 @@ export function LivePlan({ run, data, client, action, href }) {
   return <Page className="plan-review-screen" title="Approve content plan" description={run?.title ?? "Gate 1"}>
     {run && <a href={href("runs", { run: run.id })}>Back to run</a>}
     {feedback}
+    {decisionNotice && <p role="status">{decisionNotice}</p>}
     <Card title={plan ? "Plan version " + plan.version : "Content plan"}>
       <Table headers={["Selected", "Topic", "Pillar", "Call to action"]} empty="No plan items are available."
         rows={(plan?.items ?? []).map((item) => {
@@ -104,11 +108,12 @@ export function LivePlan({ run, data, client, action, href }) {
         })}>Request plan review</Button>
       </>}
     </Card>
-    {review && <Decision key={review._id} review={review} action={action} />}
+    {review && <Decision key={review._id} review={review} action={action} onSaved={setDecisionNotice} />}
   </Page>;
 }
 
 export function LivePost({ post, run, data, client, action, href }) {
+  const [decisionNotice, setDecisionNotice] = useState("");
   const [draft, setDraft] = useState(null);
   const { submit, busy, feedback } = useAction(action);
   const review = data.reviewDecisions?.find((entry) => entry.gate === "gate_2" &&
@@ -119,6 +124,7 @@ export function LivePost({ post, run, data, client, action, href }) {
   return <Page className="post-review-screen" title={post?.title ?? "Approve output"} description={post ? "Gate 2 · " + (post.status ?? "Draft") : "Select an output to review."}>
     {href("approvals") && <a href={href("approvals")}>My approvals</a>}
     {feedback}
+    {decisionNotice && <p role="status">{decisionNotice}</p>}
     <Card title={post?.version != null ? "Preview · Version " + post.version : "Preview"}>
       {draft ? <form className="admin-form" onSubmit={(event) => {
         event.preventDefault();
@@ -132,7 +138,7 @@ export function LivePost({ post, run, data, client, action, href }) {
         {canEdit && <Button onClick={() => setDraft({ id: post.currentDraftVersionId, text: post.copy ?? "" })}>Edit draft</Button>}
       </>}
     </Card>
-    {review && <Decision key={review._id} review={review} action={action} />}
+    {review && <Decision key={review._id} review={review} action={action} onSaved={setDecisionNotice} />}
     <p className="muted">Creating new output reviews and scheduling, publishing, or verifying on LinkedIn are unavailable.</p>
   </Page>;
 }

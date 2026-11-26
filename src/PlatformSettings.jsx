@@ -260,6 +260,7 @@ export function Clients({
       }
     >
       {data.clientsLoadError && <p role="alert">{data.clientsLoadError}</p>}
+      {feedback}
       {brandTable}
     </Page>
   );
@@ -274,7 +275,8 @@ export function Agents({ action, data }) {
       title="Agents and skills"
       description="Review configured pipelines, skill versions and run limits."
     >
-      {!data.agents.length && (
+      {data.agentsLoadError && <p role="alert">{data.agentsLoadError}</p>}
+      {!data.agents.length && !data.agentsLoadError && (
         <Card>
           <p className="muted">No agents configured yet.</p>
         </Card>
@@ -294,7 +296,7 @@ export function Agents({ action, data }) {
         <div className="platform-agent-detail">
           {data.agents.map((agent) => (
             <div key={agent.id} hidden={agent.id !== active.id}>
-              <Agent agent={agent} action={action} />
+              <Agent agent={agent} action={action} readOnly={data.liveAccess} />
             </div>
           ))}
         </div>
@@ -303,7 +305,7 @@ export function Agents({ action, data }) {
   );
 }
 
-function Agent({ agent, action }) {
+function Agent({ agent, action, readOnly }) {
   const [draft, setDraft] = useState({});
   const limits = { ...agent.limits, ...draft };
   const { submit, busy, feedback } = useAction(action);
@@ -347,6 +349,7 @@ function Agent({ agent, action }) {
         className="admin-form"
         onSubmit={(event) => {
           event.preventDefault();
+          if (readOnly) return;
           submit("saveAgentLimits", { id: agent.id, limits }, () =>
             setDraft({}),
           );
@@ -374,6 +377,7 @@ function Agent({ agent, action }) {
                 max={key === "maxPosts" ? 40 : undefined}
                 step={key === "cost" ? "0.01" : "1"}
                 value={limits[key] ?? ""}
+                readOnly={readOnly}
                 onChange={(event) =>
                   setDraft({ ...draft, [key]: event.target.value })
                 }
@@ -381,9 +385,7 @@ function Agent({ agent, action }) {
             </Field>
           ))}
         </div>
-        <Button primary type="submit" disabled={busy}>
-          Save limits
-        </Button>
+        {!readOnly && <Button primary type="submit" disabled={busy}>Save limits</Button>}
       </form>
       {feedback}
     </Card>

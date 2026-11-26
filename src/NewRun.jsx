@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { Button, Card, Chip, Field, Page, Table, useAction } from "./AdminControls";
 import { canStartRun, configuredAgent } from "./OperatorHome";
 import "./run-flow.css";
-import periodBriefTemplate from "./period-brief-template.xlsx?url";
+import periodBriefTemplate from "./Period Brief Template - LinkedIn.xlsx?url";
 
 const briefFields = [
   ["title", "Brief title"], ["period", "Period"], ["objective", "Objective"],
@@ -26,7 +26,12 @@ function LiveBrief({ brief, projectId, action }) {
       ]));
       if (Object.values(fields).some((value) => value === "")) return;
       await submit("saveBrief", { projectId, values: { ...fields,
-        ...(brief ? { briefId: brief.id, currentVersion: brief.currentVersion } : {}),
+        ...(brief ? {
+          briefId: brief.id,
+          currentVersion: brief.currentVersion,
+          ...Object.fromEntries(["fileRef", "templateVersion", "keyDates", "blackoutDays", "postingSlots"]
+            .filter((key) => revision?.[key] != null).map((key) => [key, revision[key]])),
+        } : {}),
       } }, () => setSaved(true));
     }}>
       {briefFields.map(([key, label]) => <Field key={key} label={label}>

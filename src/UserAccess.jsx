@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { isPlatformAdmin } from "./access";
 import {
   Button,
   Card,
@@ -244,11 +245,16 @@ export function Users({
   const [editing, setEditing] = useState(null);
   const [usersError, setUsersError] = useState(data.usersLoadError);
   const [usersLoading, setUsersLoading] = useState(false);
+  const canManageUsers = !data.liveAccess || isPlatformAdmin(data.session);
+  const actionRef = useRef(action);
   useEffect(() => {
-    if (!data.liveAccess) return;
+    actionRef.current = action;
+  }, [action]);
+  useEffect(() => {
+    if (!data.liveAccess || !canManageUsers) return;
     let current = true;
     setUsersLoading(true);
-    action("loadUsers").then(() => {
+    actionRef.current("loadUsers").then(() => {
       if (current) setUsersError(null);
     }).catch((error) => {
       if (current) setUsersError(error.message);
@@ -256,7 +262,7 @@ export function Users({
       if (current) setUsersLoading(false);
     });
     return () => { current = false; };
-  }, [action, data.liveAccess]);
+  }, [canManageUsers, data.liveAccess, data.session?.email]);
   const [filters, setFilters] = useState({
     search: "",
     role: "All",
@@ -475,10 +481,10 @@ export function Users({
                     "—",
                 user.last,
                 <div className="admin-actions">
-                  <Button disabled={busy || usersLoading} onClick={() => setEditing(user)}>Edit access</Button>
+                  <Button disabled={!canManageUsers || busy} onClick={() => setEditing(user)}>Edit access</Button>
                   {user.status === "Active" && (
                     <Button
-                      disabled={busy || usersLoading}
+                      disabled={!canManageUsers || busy}
                       onClick={() => {
                         if (window.confirm("Suspend " + user.name + "?"))
                           submit("suspendUser", { email: user.email, confirmed: user.global });
