@@ -84,9 +84,7 @@ function RunPipeline({ run, agent, planning }) {
   const qualification = run.qualificationResult;
   const plan = run.planningResult;
   const drafts = run.draftingResult;
-  const executions = run.stageExecutions;
-  const names = executions ? [...new Set(executions.map((stage) => stage.stageKey))]
-    : agent?.pipeline?.length ? agent.pipeline.map(({ name }) => name) : pipeline;
+  const names = agent?.pipeline?.length ? agent.pipeline.map(({ name }) => name) : pipeline;
   const outcome = (stage) => ({ BLOCKED: "Blocked", LIMITED: "Limited", REVISE: "Needs revision", READY: "Done", PASS: "Done" })[stage?.verdict];
   const statuses = [
     qualification?.error ? "Failed" : outcome(qualification?.qualification ?? qualification?.context),
@@ -100,14 +98,11 @@ function RunPipeline({ run, agent, planning }) {
     <ol className="run-pipeline" aria-label="Run stages">
       {names.map((name, index) => {
         const stage = run.stages?.find((item) => item.name?.toLowerCase() === name.toLowerCase());
-        const execution = executions?.findLast((item) => item.stageKey === name);
-        const liveStatus = execution?.status?.replace(/_/g, " ").replace(/^./, (letter) => letter.toUpperCase());
-        const status = liveStatus ?? stage?.status ?? (names === pipeline ? statuses[index] : undefined) ?? "Pending";
+        const status = stage?.status ?? (names === pipeline ? statuses[index] : undefined) ?? "Pending";
         return (
           <li className="card" key={name}>
-            <strong>{executions ? name.replace(/[-_]/g, " ") : name}</strong>
+            <strong>{name}</strong>
             <Chip tone={tones[status]}>{status}</Chip>
-            {execution?.finishedAt && <span className="muted">{new Date(execution.finishedAt).toLocaleString()}</span>}
             {stage?.duration && <span className="muted">{stage.duration}</span>}
           </li>
         );
@@ -176,7 +171,11 @@ export default function RunWorkspace({ data, client, run, href, action, preview,
       }
     >
       <a href={href("runs")}>← Runs</a>
-      <RunPipeline run={run} agent={agent} planning={planningNow} />
+      {data.liveAccess ? <Card title="Run stages">
+        <Table headers={["Stage", "Status", "Finished"]}
+          rows={(run.stageExecutions ?? []).map((stage) => [stage.stageKey, stage.status, stage.finishedAt ?? "-"])}
+          empty="No stage executions are recorded for this run." />
+      </Card> : <RunPipeline run={run} agent={agent} planning={planningNow} />}
       {data.liveAccess && run.planRevisions?.length > 0 && <Card title="Content plan">
         <WorkflowLink href={href("plan", { run: run.id })} gate>Open plan review</WorkflowLink>
       </Card>}

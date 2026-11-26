@@ -1,4 +1,3 @@
-import { rolesForClient } from "./access";
 import { useState } from "react";
 import {
   Button,
@@ -22,16 +21,7 @@ export default function PostReview({ data, client, run, post, href, action, canA
   const [reason, setReason] = useState("");
   const [category, setCategory] = useState("");
   const [comment, setComment] = useState("");
-  const [draft, setDraft] = useState(null);
-  const [stepUp, setStepUp] = useState(false);
-  const { submit, busy, feedback } = useAction(async (name, payload) => {
-    try {
-      return await action(name, payload);
-    } catch (error) {
-      if (error.code === "reauthentication_required") setStepUp(true);
-      throw error;
-    }
-  });
+  const { submit, busy, feedback } = useAction(action);
   if (!post || !run || !client)
     return (
       <Page
@@ -48,17 +38,11 @@ export default function PostReview({ data, client, run, post, href, action, canA
       </Page>
     );
 
-  const live = data.liveAccess;
-  const review = (data.reviewDecisions ?? []).find((entry) => entry.gate === "gate_2" &&
-    String(entry.contentItemId) === post.id && String(entry.draftVersionId) === String(post.currentDraftVersionId));
-  const canEdit = live && post.currentDraftVersionId &&
-    !["publishing", "published", "cancelled"].includes(String(post.status).toLowerCase()) &&
-    rolesForClient(data.session, client.id).some((role) => ["approver", "marketing_operator"].includes(role));
   const queue = data.posts.filter(
     (item) =>
       item.clientId === client.id &&
       item.runId === run.id &&
-      (live ? (data.reviewDecisions ?? []).some((entry) => String(entry.contentItemId) === item.id) : item.status === "Awaiting approval"),
+      item.status === "Awaiting approval",
   );
   const index = queue.findIndex((item) => item.id === post.id);
   const profiles = (data.integrations.linkedin?.profiles ?? []).filter(
@@ -68,7 +52,7 @@ export default function PostReview({ data, client, run, post, href, action, canA
   );
   const profile = profiles.find((item) => item.id === profileId);
   const approveAllowed =
-    live ? Boolean(review) : post.status === "Awaiting approval" && post.canApprove !== false;
+    post.status === "Awaiting approval" && post.canApprove !== false;
   const connected = profile?.connected === true;
   const handlers = {
     approve: "approvePost",
@@ -99,15 +83,8 @@ export default function PostReview({ data, client, run, post, href, action, canA
   }
   function commit(event) {
     event.preventDefault();
-    if (stale || !approveAllowed || (!live && decision === "approve" && !connected)) return;
-    if (live) {
-      submit("decideReview", {
-        projectId: String(review.projectId), reviewId: review._id,
-        decision: { approve: "approved", reject: "rejected", changes: "changes_requested" }[decision],
-        reason: reason.trim(),
-      }, () => { setDecision(""); setReason(""); setCategory(""); });
+    if (stale || !approveAllowed || (decision === "approve" && !connected))
       return;
-    }
     submit(
       handlers[decision],
       {
@@ -197,16 +174,6 @@ export default function PostReview({ data, client, run, post, href, action, canA
             )}
             {post.cta && <p className="workflow-copy">{post.cta}</p>}
           </div>
-          {canEdit && (draft ? <form className="workflow-form" onSubmit={(event) => {
-            event.preventDefault();
-            submit("savePostDraft", { runId: run.id, postId: post.id,
-              currentDraftVersionId: draft.id, text: draft.text }, () => setDraft(null));
-          }}>
-            <Field label="Draft text"><textarea required value={draft.text}
-              onChange={(event) => setDraft({ ...draft, text: event.target.value })} /></Field>
-            <Button type="submit" primary disabled={busy}>Save draft revision</Button>
-            <Button disabled={busy} onClick={() => setDraft(null)}>Cancel</Button>
-          </form> : <Button onClick={() => setDraft({ id: post.currentDraftVersionId, text: post.copy ?? "" })}>Edit draft</Button>)}
           {post.liveUrl && <a href={post.liveUrl}>View published post</a>}
         </Card>
         <Card>
@@ -323,7 +290,7 @@ export default function PostReview({ data, client, run, post, href, action, canA
           </>}
         </Card>
       </div>
-
+      {data.liveAccess && <p role="status">Draft editing, approval decisions and LinkedIn publishing are unavailable on the connected backend.</p>}
       {feedback}
       <section className="card workflow-foot">
         <div className="admin-row">
@@ -332,13 +299,13 @@ export default function PostReview({ data, client, run, post, href, action, canA
             {profile?.name ?? "Select a profile"} · Version{" "}
             {post.version ?? "—"}
           </p>
-          {(live ? Boolean(review) : canAct("approvePost")) && <div className="admin-actions">
-            {!live && <Button
+          {canAct("approvePost") && <div className="admin-actions">
+            <Button
               disabled={!approveAllowed || busy}
               onClick={() => openDecision("hold")}
             >
               Hold
-            </Button>}
+            </Button>
             <Button
               disabled={!approveAllowed || busy}
               onClick={() => openDecision("reject")}
@@ -356,7 +323,9 @@ export default function PostReview({ data, client, run, post, href, action, canA
               className="btn gate"
               disabled={
                 !approveAllowed ||
-                (live ? !review?.destination : !connected || !post.scheduledAt || post.version == null) ||
+                !connected ||
+                !post.scheduledAt ||
+                post.version == null ||
                 busy
               }
               onClick={() => openDecision("approve")}
@@ -418,7 +387,6 @@ export default function PostReview({ data, client, run, post, href, action, canA
               </>
             )}
             {feedback}
-            {stepUp && <Button disabled={busy} onClick={() => submit("signIn", { reauthenticate: true })}>Confirm Google sign-in</Button>}
             <div className="admin-actions">
               <Button
                 className="btn gate"
@@ -428,7 +396,7 @@ export default function PostReview({ data, client, run, post, href, action, canA
                 }
               >
                 {decision === "approve"
-                  ? (live ? "Approve" : "Re-authenticate and approve")
+                  ? "Re-authenticate and approve"
                   : "Confirm"}
               </Button>
               <Button

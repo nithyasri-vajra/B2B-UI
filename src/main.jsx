@@ -17,6 +17,7 @@ import ApprovalsQueue from "./ApprovalsQueue";
 import MyBrands from "./MyBrands";
 import { MyProfile, Outputs } from "./BrandViews";
 import { Button, useAction } from "./AdminControls";
+import { LiveApprovals, LivePlan, LivePost } from "./LiveWorkflow";
 
 function LogoutButton({ action }) {
   const { submit, busy, feedback } = useAction(action);
@@ -152,7 +153,6 @@ export function B2BAgents({
     const assignedReview = data.reviewDecisions?.find((review) => review._id === payload.reviewId &&
       String(review.clientId) === targetClient && String(review.projectId) === payload.projectId);
     const livePermissions = {
-      uploadKnowledgeFile: platformAdmin || scopedRole.includes("knowledge_admin"),
       addKnowledgeSource: platformAdmin || scopedRole.includes("knowledge_admin"),
       createKnowledgeRecord: scopedRole.includes("knowledge_admin"),
       reviseKnowledgeRecord: scopedRole.includes("knowledge_admin"),
@@ -165,7 +165,7 @@ export function B2BAgents({
     if (requireSignIn && (
       (payload.runId !== undefined && !actionRun) ||
       (!platformAdmin && payload.clientId != null && payload.clientId !== targetClient) ||
-      (["saveBrief", "saveRunDraft"].includes(name) && !data.projects.some(({ id, clientId }) => id === payload.projectId && clientId === targetClient)) ||
+      (name === "saveBrief" && !data.projects.some(({ id, clientId }) => id === payload.projectId && clientId === targetClient)) ||
       !(data.liveAccess && Object.hasOwn(livePermissions, name)
         ? livePermissions[name] : canPerformAction(session, targetClient, name, actionRun))
     )) throw new Error("You do not have permission to perform this action.");
@@ -254,7 +254,8 @@ export function B2BAgents({
   const view = page;
   const showSetup = pageAllowed && !data.liveAccess && view === "new-run" && !params.has("run") &&
     needsFirstRunSetup(client, data.readiness.find((report) => report.clientId === client?.id));
-  const Screen = showSetup ? OperatorHome : screens[view] ?? OperatorHome;
+  const liveScreen = data.liveAccess && { approvals: LiveApprovals, plan: LivePlan, post: LivePost }[view];
+  const Screen = showSetup ? OperatorHome : liveScreen || (screens[view] ?? OperatorHome);
   const clientHref = (target, parameters) => allowed(target) ? workflowHref(target, { client: client?.id, ...parameters }) : undefined;
   const clientNavigate = (target, parameters) => navigate(target, { client: client?.id, ...parameters });
   return (
@@ -286,7 +287,7 @@ export function B2BAgents({
         canAct={(name, targetRun = run) => !requireSignIn ||
           (data.liveAccess && name === "cancelRun"
             ? Boolean(targetRun && (platformAdmin || rolesForClient(session, client?.id).some((role) => ["approver", "marketing_operator"].includes(role))))
-            : (!data.liveAccess || ["saveBrief", "saveRunDraft"].includes(name)) && canPerformAction(session, client?.id, name, targetRun))}
+            : (!data.liveAccess || name === "saveBrief") && canPerformAction(session, client?.id, name, targetRun))}
         link={(file) => ({
           href: clientHref(file === "RecordReview.dc.html" ? "records" : "setup"),
         })}

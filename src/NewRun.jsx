@@ -1,21 +1,88 @@
 import { useRef, useState } from "react";
 import { Button, Card, Chip, Field, Page, Table, useAction } from "./AdminControls";
 import { canStartRun, configuredAgent } from "./OperatorHome";
-import { validateBrief } from "./validateBrief";
 import "./run-flow.css";
 import periodBriefTemplate from "./period-brief-template.xlsx?url";
 
-export default function NewRun(props) {
-  const { client, run } = props;
-  return <PeriodBriefScreen key={JSON.stringify([client?.id, run?.id])} {...props} />;
+const briefFields = [
+  ["title", "Brief title"], ["period", "Period"], ["objective", "Objective"],
+  ["audience", "Audience"], ["deliverables", "Deliverables"], ["kpi", "KPI"],
+];
+
+function LiveBrief({ brief, projectId, action }) {
+  const revision = brief?.versions?.find(({ version }) => version === brief.currentVersion);
+  const [values, setValues] = useState(() => Object.fromEntries(briefFields.map(([key]) => {
+    const value = key === "title" ? brief?.title : revision?.[key];
+    return [key, value == null ? "" : typeof value === "string" ? value : JSON.stringify(value)];
+  })));
+  const { busy, submit, feedback } = useAction(action);
+  const [saved, setSaved] = useState(false);
+  return (
+    <form className="admin-form" onSubmit={async (event) => {
+      event.preventDefault();
+      setSaved(false);
+      const fields = Object.fromEntries(Object.entries(values).map(([key, value]) => [
+        key, value === (typeof revision?.[key] === "object" ? JSON.stringify(revision[key]) : undefined) ? revision[key] : value.trim(),
+      ]));
+      if (Object.values(fields).some((value) => value === "")) return;
+      await submit("saveBrief", { projectId, values: { ...fields,
+        ...(brief ? { briefId: brief.id, currentVersion: brief.currentVersion } : {}),
+      } }, () => setSaved(true));
+    }}>
+      {briefFields.map(([key, label]) => <Field key={key} label={label}>
+        <input required value={values[key]} onChange={(event) => setValues({ ...values, [key]: event.target.value })} />
+      </Field>)}
+      <Button primary type="submit" disabled={busy || saved || Boolean(brief && !revision)}>Save brief</Button>
+      {saved && <p role="status">Brief saved.</p>}
+      {brief && !revision && <p role="alert">The current revision is unavailable. Reload the app before editing.</p>}
+      {feedback}
+    </form>
+  );
 }
 
-function PeriodBriefScreen({ data, client, run, href, navigate, action, preview, canAct }) {
-  const live = data.liveAccess;
+function LiveNewRun({ data, client, run, href, action, canAct }) {
   const projects = data.projects.filter(({ clientId }) => clientId === client?.id);
-  const [projectId, setProjectId] = useState(projects[0]?.id ?? "");
-  const [workbook, setWorkbook] = useState(null);
-  const [savedBrief, setSavedBrief] = useState(null);
+  const [selected, setSelected] = useState(run?.projectId ?? projects[0]?.id ?? "");
+  const [briefId, setBriefId] = useState(run?.briefId ?? "");
+  const briefs = data.briefs.filter(({ projectId }) => projectId === selected);
+  const brief = briefs.find(({ id }) => id === briefId);
+  return (
+    <Page className="new-run-screen" title={run ? "Run brief" : "New run"}>
+      <a href={href("runs")}>← Runs</a>
+      {data.workflowLoadError && <p role="alert">{data.workflowLoadError}</p>}
+      <Card title="Period brief">
+        <p>Excel upload and automatic run execution are unavailable on the connected backend.</p>
+        {projects.length ? <Field label="Project">
+          <select value={selected} disabled={Boolean(run)} onChange={(event) => { setSelected(event.target.value); setBriefId(""); }}>
+            {projects.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
+          </select>
+        </Field> : <p>No projects are available for this brand.</p>}
+        {selected && !run && canAct("saveBrief") && <>
+          <Field label="Brief">
+            <select value={briefId} onChange={(event) => setBriefId(event.target.value)}>
+              <option value="">Create a brief</option>
+              {briefs.map(({ id, title }) => <option key={id} value={id}>{title}</option>)}
+            </select>
+          </Field>
+          <LiveBrief key={selected + ":" + briefId + ":" + (brief?.currentVersion ?? 0)} brief={brief}
+            projectId={selected} action={async (name, payload) => {
+              const result = await action(name, payload);
+              const savedBrief = result?.data?.briefs?.[0];
+              if (savedBrief) setBriefId(savedBrief.id);
+              return result;
+            }} />
+        </>}
+        {selected && (run || !canAct("saveBrief")) && <p>{brief?.title ?? "Brief editing is unavailable for this view."}</p>}
+      </Card>
+    </Page>
+  );
+}
+
+export default function NewRun(props) {
+  return props.data.liveAccess ? <LiveNewRun {...props} /> : <PreviewNewRun {...props} />;
+}
+
+function PreviewNewRun({ data, client, run, href, navigate, action, preview }) {
   const agent = configuredAgent(data, run ? run.agentId : client?.agentId);
   const templateUrl = agent?.briefTemplateUrl ?? data.integrations.briefTemplateUrl ?? periodBriefTemplate;
   const input = useRef(null);
@@ -29,10 +96,6 @@ function PeriodBriefScreen({ data, client, run, href, navigate, action, preview,
   const result = useRef(null);
   const { submit, busy, feedback } = useAction(async (name, payload) => {
     try {
-      if (name === "checkWorkbook") {
-        setWorkbook(await validateBrief(payload.file, client));
-        return;
-      }
       result.current = await action(name, payload);
       return result.current;
     } catch (error) {
@@ -44,7 +107,7 @@ function PeriodBriefScreen({ data, client, run, href, navigate, action, preview,
     }
   });
   const readiness = data.readiness.find((item) => item.clientId === client?.id);
-  const brief = live ? workbook : data.briefs.find(
+  const brief = data.briefs.find(
     (item) => item.clientId === client?.id && item.id === briefId,
   );
   const blocked = !canStartRun(readiness);
@@ -54,7 +117,7 @@ function PeriodBriefScreen({ data, client, run, href, navigate, action, preview,
     !issues.some((issue) => issue.severity === "Error");
   const currentStep = fileName ? 2 : 1;
 
-  async function pick(file) {
+  function pick(file) {
     if (!file || busy || !client) return;
     setFileError("");
     if (!/\.xlsx$/i.test(file.name) || file.size > 5 * 1024 * 1024) {
@@ -62,35 +125,13 @@ function PeriodBriefScreen({ data, client, run, href, navigate, action, preview,
       return;
     }
     setBriefId(null);
-    setWorkbook(null);
-    setSavedBrief(null);
     setFileName(file.name);
-    if (live) {
-      await submit("checkWorkbook", { file });
-      return;
-    }
     submit("validateBrief", { file, runId: run?.id }, () => {
       const received =
         result.current?.briefId ?? result.current?.data?.briefs?.[0]?.id;
       if (received) setBriefId(received);
       else setFileError("Validation finished without a brief reference.");
     });
-  }
-
-  function saveWorkbook() {
-    const fields = workbook.fields;
-    const value = (...keys) => {
-      const aliases = keys.map((key) => key.toLowerCase());
-      return Object.entries(fields).find(([key]) => aliases.includes(key.trim().toLowerCase()))?.[1];
-    };
-    submit("saveBrief", { projectId, values: {
-      title: fileName.replace(/\.xlsx$/i, ""),
-      period: workbook.period,
-      objective: String(value("Primary objective", "Objective") ?? ""),
-      audience: String(value("Target audience", "Audience") ?? ""),
-      deliverables: { postCount: workbook.postCount, fields },
-      kpi: Object.fromEntries(Object.entries(fields).filter(([key]) => /kpi|target/i.test(key))),
-    } }, () => setSavedBrief(result.current?.data?.briefs?.[0]));
   }
 
   function save(name) {
@@ -135,22 +176,13 @@ function PeriodBriefScreen({ data, client, run, href, navigate, action, preview,
       <div className="new-run-layout">
         <div className="new-run-setup">
           <Card title={agent?.name ? "Brief · " + agent.name : "Period brief"}>
-            {live && <Field label="Project">
-              <select value={projectId} disabled={busy} onChange={(event) => {
-                setProjectId(event.target.value);
-                setSavedBrief(null);
-              }}>
-                {!projects.length && <option value="">No projects available</option>}
-                {projects.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
-              </select>
-            </Field>}
             <a href={templateUrl} download={templateUrl === periodBriefTemplate ? "period-brief-template.xlsx" : true}>
               Download brief template (.xlsx)
             </a>
             <button
               className="ph workflow-drop"
               type="button"
-              disabled={!client || busy || (live && (!projectId || !canAct("saveBrief")))}
+              disabled={!client || busy}
               onClick={() => input.current.click()}
               onDragOver={(event) => event.preventDefault()}
               onDrop={(event) => {
@@ -183,8 +215,6 @@ function PeriodBriefScreen({ data, client, run, href, navigate, action, preview,
                     disabled={busy}
                     onClick={() => {
                       setBriefId(null);
-                      setWorkbook(null);
-                      setSavedBrief(null);
                       setFileName("");
                       setFileError("");
                     }}
@@ -248,7 +278,7 @@ function PeriodBriefScreen({ data, client, run, href, navigate, action, preview,
                 />
               </label>
             )}
-            {!live && blocked && (
+            {blocked && (
               <div className="new-run-validation-readiness">
                 <strong>Readiness check required</strong>
                 <p>
@@ -263,16 +293,7 @@ function PeriodBriefScreen({ data, client, run, href, navigate, action, preview,
                 {item}
               </p>
             ))}
-            {live ? (
-              <div className="new-run-validation-actions">
-                <Button primary disabled={!ready || busy || !projectId || Boolean(savedBrief) || !canAct("saveBrief")}
-                  onClick={saveWorkbook}>Save brief</Button>
-                {savedBrief && <p role="status">Brief saved.</p>}
-                {!run && savedBrief && <Button disabled={busy || !canAct("saveRunDraft")} onClick={() =>
-                  submit("saveRunDraft", { projectId, briefId: savedBrief.id, briefVersion: savedBrief.currentVersion },
-                    () => navigate("runs", { run: result.current.runId }))}>Save as draft</Button>}
-              </div>
-            ) : run ? (
+            {run ? (
               <>
                 <Button
                   primary
@@ -320,7 +341,7 @@ function PeriodBriefScreen({ data, client, run, href, navigate, action, preview,
               </div>
             )}
             {preview && ready && <p className="muted">This preview runs Context Assembler and Brief Qualifier.</p>}
-            {!live && busy && ready && <p role="status">Running the skills. Keep this page open.</p>}
+            {busy && ready && <p role="status">Running the skills. Keep this page open.</p>}
             {feedback}
           </Card>
 
