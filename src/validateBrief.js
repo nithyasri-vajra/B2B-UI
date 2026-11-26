@@ -21,7 +21,7 @@ function asDate(value, date1904) {
   return !Number.isNaN(date.getTime()) && date.toISOString().startsWith(iso) ? iso : null;
 }
 
-export async function validateBrief(file, client) {
+export async function validateBrief(file, client, { requireKpi = false } = {}) {
   const issues = [];
   const issue = (location, message) => issues.push({ severity: "Error", location, message });
   const fields = Object.create(null);
@@ -49,27 +49,41 @@ export async function validateBrief(file, client) {
   const kpiHeader = answerHeader(kpi, "A", "D");
   const focusHeader = focus?.find(({ cells }) =>
     headerText(cells.B) === "content focus" && headerText(cells.H) === "planned posts");
-  if (!briefHeader || !focusHeader || !kpiHeader) {
-    issue("Workbook", "Use the LinkedIn Period Brief template available on this page.");
+  const simple = tabs.get("brief");
+  const simpleHeader = simple?.find(({ cells }) => headerText(cells.A) === "field" && headerText(cells.B) === "value");
+  if (simple ? !simpleHeader : (!briefHeader || !focusHeader || !kpiHeader)) {
+    issue("Workbook", "Use a Brief sheet with Field and Value columns or the LinkedIn template on this page.");
     return invalid;
   }
 
   const values = new Map();
-  for (const { number, cells } of brief) {
+  if (simple) {
+    for (const { number, cells } of simple) {
+      if (number <= simpleHeader.number || !cells.A) continue;
+      const name = String(cells.A).trim();
+      const key = name.toLowerCase();
+      if (values.has(key)) {
+        issue("Brief!A" + number, "Duplicate field: " + name + ".");
+        continue;
+      }
+      values.set(key, { name, value: cells.B, location: "Brief!B" + number });
+      if (cells.B != null) fields[name] = cells.B;
+    }
+  } else for (const { number, cells } of brief) {
     if (number <= briefHeader.number || typeof cells.A !== "number" || !cells.B) continue;
     const name = String(cells.B).trim();
     const value = cells.E;
     values.set(name.toLowerCase(), { name, value, location: "1 Period Brief!E" + number });
     if (value != null && String(value).trim()) fields[name] = value;
   }
-  for (const { number, cells } of kpi) {
-    if (number <= kpiHeader.number) continue;
+  for (const { number, cells } of kpi ?? []) {
+    if (number <= (kpiHeader?.number ?? Infinity)) continue;
     if (headerText(cells.A).startsWith("calculated")) break;
     if (!cells.A || cells.D == null || !String(cells.D).trim()) continue;
     fields["KPI & Target / " + cells.A] = cells.D;
   }
-  for (const { number, cells } of focus) {
-    if (number <= focusHeader.number || typeof cells.A !== "number" || !cells.B) continue;
+  for (const { number, cells } of focus ?? []) {
+    if (!focusHeader || number <= focusHeader.number || typeof cells.A !== "number" || !cells.B) continue;
     for (const column of ["B", "C", "D", "E", "F", "G", "H", "I"]) {
       const header = focusHeader.cells[column];
       if (header && cells[column] != null && String(cells[column]).trim())
@@ -104,11 +118,11 @@ export async function validateBrief(file, client) {
     return { date, location: entry.location };
   }
 
-  match("Brand", client.name.replace(/ \(Preview\)$/, ""));
+  match("Brand", client.name.replace(/ \(Preview\)$/, ""), "Client", "Client name");
   const channel = required("Channel");
   if (channel && client.channel) {
     const normalize = (value) => String(value).trim().toLowerCase().replace(/^linkedin company page$/, "linkedin");
-    if (normalize(channel.value) !== normalize(client.channel))
+    if (!client.channel.split(",").some((value) => normalize(channel.value) === normalize(value)))
       issue(channel.location, "Channel must match " + client.channel + ".");
   }
   required("Primary objective", "Objective");
@@ -123,7 +137,7 @@ export async function validateBrief(file, client) {
     if (days <= 0 || days > 92) issue(end.location, "End date must follow start date within 92 days.");
   }
 
-  const posts = required("Planned post count");
+  const posts = required("Planned post count", "Number of posts", "Post count", "Posts requested");
   let postCount = null;
   if (posts) {
     const value = String(posts.value).trim();
@@ -132,5 +146,8 @@ export async function validateBrief(file, client) {
         Number.isInteger(count) && count >= 1 && count <= 40) postCount = count;
     else issue(posts.location, "Enter a whole number from 1 to 40.");
   }
-  return { validated: !issues.length, fields, issues, period: hasPeriod ? start.date + " to " + end.date : null, postCount };
+  const primaryKpi = values.get("primary kpi")?.value ?? values.get("kpi")?.value ??
+    Object.entries(fields).find(([name]) => /^KPI & Target \/ (primary )?kpi$/i.test(name))?.[1];
+  if (requireKpi && !String(primaryKpi ?? "").trim()) issue("Brief", "Enter the primary KPI.");
+  return { validated: !issues.length, fields, issues, primaryKpi, period: hasPeriod ? start.date + " to " + end.date : null, postCount };
 }

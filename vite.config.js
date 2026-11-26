@@ -3,9 +3,10 @@ import { previewRunMiddleware } from "./scripts/preview-run.js";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), ["OPENAI_", "B2B_"]);
-  const authPath = loadEnv(mode, process.cwd(), "VITE_AUTH_API_PATH").VITE_AUTH_API_PATH;
+  const { VITE_AUTH_API_PATH: authPath } = loadEnv(mode, process.cwd(), "VITE_AUTH_API_PATH");
+  const { B2B_AUTH_PROXY_TARGET } = env;
   const authProxy = authPath === "/api/auth"
-    ? { "/api/auth": "https://b2b-backend-387a.onrender.com" }
+    ? { "/api/auth": B2B_AUTH_PROXY_TARGET || "https://b2b-backend-387a.onrender.com" }
     : undefined;
   const configure = (server) => {
     if (!authPath) previewRunMiddleware(server, env);

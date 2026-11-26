@@ -102,7 +102,7 @@ export async function readWorkbook(file) {
     return value;
   }
   const tabs = new Map();
-  for (const name of ["1 period brief", "2 content focus", "3 kpi & target"]) {
+  for (const name of ["brief", "1 period brief", "2 content focus", "3 kpi & target"]) {
     if (!sheets.has(name)) continue;
     const link = links.find((item) => item.getAttribute("Id") === sheets.get(name));
     const sheet = await xml(target(link));

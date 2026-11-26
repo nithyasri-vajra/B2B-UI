@@ -1,20 +1,18 @@
 import { useRef, useState } from "react";
-import { Button, Card, Chip, Page, useAction } from "./AdminControls";
+import { Button, Card, Chip, Page, Table, useAction } from "./AdminControls";
 
 import { knowledgeFiles } from "./extractKnowledgeRecords";
 import "./knowledge-sources-records.css";
-import { LiveSources } from "./LiveKnowledge";
+import { AddKnowledgeLink } from "./LiveKnowledge";
+import { isPlatformAdmin } from "./access";
 
-export default function KnowledgeSetup(props) {
-  return props.data.liveAccess ? <LiveSources {...props} /> : <PreviewKnowledgeSetup {...props} />;
-}
-
-function PreviewKnowledgeSetup({
+export default function KnowledgeSetup({
   link,
   action,
   onFiles,
   client,
   data,
+  readOnly,
 }) {
   const picker = useRef(null);
   const folderPicker = useRef(null);
@@ -30,12 +28,14 @@ function PreviewKnowledgeSetup({
   const uploads = data.uploads.filter((item) => item.clientId === client?.id);
   const readiness = data.readiness.find((item) => item.clientId === client?.id);
   const isUploadingFolder = folderUpload?.active ?? false;
-  const controlsBusy = busy || isUploadingFolder || data.liveAccess;
+  const canUpload = !data.liveAccess || ((!readOnly || isPlatformAdmin(data.session)) && !client?.archived);
+  const controlsBusy = busy || isUploadingFolder || !canUpload;
   const currentFolder = folderUpload?.clientId === client?.id ? folderUpload : null;
   const fileStatuses = knowledgeFiles.map(({ name }) => {
-    const savedUpload = uploads.findLast((item) => item.name?.toLowerCase() === name);
+    const savedUpload = uploads.findLast((item) => item.name?.toLowerCase() === name &&
+      (!data.liveAccess || item.sourceType === "file"));
     const savedStatus = savedUpload?.status?.toLowerCase();
-    const uploaded = ["uploaded", "processing", "extracting", "extracted", "completed"].includes(savedStatus);
+    const uploaded = Boolean(savedUpload?.storedFile) || ["uploaded", "processing", "extracting", "extracted", "completed"].includes(savedStatus);
     return currentFolder?.statuses[name] ?? (uploaded ? "Uploaded" : "Waiting");
   });
 
@@ -95,7 +95,7 @@ function PreviewKnowledgeSetup({
             throw new Error(result?.message || "Upload could not be completed.");
           }
           setFileStatus(name, "Uploaded");
-          if (index < matches.length - 1) {
+          if (!data.liveAccess && index < matches.length - 1) {
             // Give the sidebar time to paint even when the preview service resolves immediately.
             await new Promise((resolve) => setTimeout(resolve, 50));
           }
@@ -110,6 +110,19 @@ function PreviewKnowledgeSetup({
   }
 
   function upload(files, target) {
+    if (data.liveAccess) {
+      const selected = Array.from(files);
+      const matches = knowledgeFiles.map(({ name, domains }) => ({
+        name, domain: domains[0], files: selected.filter((file) => file.name.toLowerCase() === name),
+      })).filter(({ files }) => files.length);
+      if (!matches.length || matches.length !== selected.length || matches.some(({ files }) => files.length !== 1)) {
+        setFolderUpload({ clientId: client?.id, statuses: currentFolder?.statuses ?? {}, errors: [
+          "Choose one or more of the five knowledge files, with one copy per filename.",
+        ] });
+        return;
+      }
+      return uploadKnowledgeFiles(matches);
+    }
     const accepted = Array.from(files).filter(
       (file) =>
         file.type.startsWith("image/") ||
@@ -128,12 +141,12 @@ function PreviewKnowledgeSetup({
       description="Upload and review sources for the selected client."
       actions={
         <>
-          <Button
+          {!data.liveAccess && <Button
             disabled={!client || controlsBusy}
             onClick={() => submit("saveKnowledgeSetup")}
           >
             Save setup
-          </Button>
+          </Button>}
           <a className="btn pri" {...link("RecordReview.dc.html")}>
             Next: review records
           </a>
@@ -150,7 +163,7 @@ function PreviewKnowledgeSetup({
           <a {...link("#new-client")}>Create a client</a> to enable folder uploads.
         </p>
       )}
-      {data.liveAccess && <p role="status">Knowledge source uploads are unavailable on the connected backend.</p>}
+      {data.brandKnowledgeLoadError && <p role="alert">Some knowledge data could not be loaded. Reload to retry.</p>}
       <div className="knowledge-source-layout"
         style={{
           display: "flex",
@@ -175,6 +188,7 @@ function PreviewKnowledgeSetup({
                   )}
                 </span>
                 {name}
+                {["Queued", "Uploading", "Failed"].includes(fileStatuses[index]) && <span>{fileStatuses[index]}</span>}
               </li>
             ))}
           </ul>
@@ -210,14 +224,14 @@ function PreviewKnowledgeSetup({
             onClick={() => picker.current.click()}
           >
             <strong>Drop files here or browse</strong>
-            <span>MD, PDF, DOCX, PPTX, XLSX, CSV, TXT/VTT transcripts and images</span>
+            <span>{data.liveAccess ? "Choose from the five knowledge Markdown files" : "MD, PDF, DOCX, PPTX, XLSX, CSV, TXT/VTT transcripts and images"}</span>
           </button>
           <input
             ref={picker}
             hidden
             type="file"
             multiple
-            accept=".md,.pdf,.docx,.pptx,.xlsx,.csv,.txt,.vtt,image/*"
+            accept={data.liveAccess ? ".md" : ".md,.pdf,.docx,.pptx,.xlsx,.csv,.txt,.vtt,image/*"}
             onChange={(event) => {
               upload(event.currentTarget.files, null);
               event.currentTarget.value = "";
@@ -273,6 +287,13 @@ function PreviewKnowledgeSetup({
           </div>
         </section>
       </div>
+      {data.liveAccess && client && canUpload && <AddKnowledgeLink action={action} />}
+      {data.liveAccess && uploads.some((row) => !row.storedFile) && <Card title="Registered sources">
+        <Table headers={["Source", "Areas", "Type", "Processing"]}
+          rows={uploads.filter((row) => !row.storedFile).map((row) => ({
+            key: row.id, cells: [row.name, row.domain, row.sourceType, row.status ?? "Unknown"],
+          }))} />
+      </Card>}
     </Page>
   );
 }

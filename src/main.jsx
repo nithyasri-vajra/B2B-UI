@@ -165,7 +165,7 @@ export function B2BAgents({
     if (requireSignIn && (
       (payload.runId !== undefined && !actionRun) ||
       (!platformAdmin && payload.clientId != null && payload.clientId !== targetClient) ||
-      (name === "saveBrief" && !data.projects.some(({ id, clientId }) => id === payload.projectId && clientId === targetClient)) ||
+      (["saveBrief", "startRun"].includes(name) && !data.projects.some(({ id, clientId }) => id === payload.projectId && clientId === targetClient)) ||
       !(data.liveAccess && Object.hasOwn(livePermissions, name)
         ? livePermissions[name] : canPerformAction(session, targetClient, name, actionRun))
     )) throw new Error("You do not have permission to perform this action.");
@@ -295,7 +295,7 @@ export function B2BAgents({
         canAct={(name, targetRun = run) => !requireSignIn ||
           (data.liveAccess && name === "cancelRun"
             ? Boolean(targetRun && (platformAdmin || rolesForClient(session, client?.id).some((role) => ["approver", "marketing_operator"].includes(role))))
-            : (!data.liveAccess || name === "saveBrief") && canPerformAction(session, client?.id, name, targetRun))}
+            : (!data.liveAccess || ["saveBrief", "startRun"].includes(name)) && canPerformAction(session, client?.id, name, targetRun))}
         link={(file) => ({
           href: clientHref(file === "RecordReview.dc.html" ? "records" : "setup"),
         })}

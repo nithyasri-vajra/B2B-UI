@@ -91,6 +91,7 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
   const endpoint = base.pathname.replace(/\/$/, "");
 
   async function call(path, payload, method = payload === undefined ? "GET" : "POST") {
+    const fileBody = payload instanceof Blob;
     const response = await request(endpoint + path, {
       method,
       credentials: "same-origin",
@@ -98,9 +99,9 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
       redirect: "error",
       headers: {
         Accept: "application/json",
-        ...(payload === undefined ? {} : { "Content-Type": "application/json" }),
+        ...(payload === undefined ? {} : { "Content-Type": fileBody ? "application/octet-stream" : "application/json" }),
       },
-      body: payload === undefined ? undefined : JSON.stringify(payload),
+      body: payload === undefined ? undefined : fileBody ? payload : JSON.stringify(payload),
     }).catch(() => {
       throw new Error("Could not reach the app service. Check your connection and try again.");
     });
@@ -258,6 +259,11 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
         failed: [report, uploads, entries].some(({ status }) => status === "rejected"),
       };
     },
+    async uploadSources({ clientId, files }) {
+      const [file] = files;
+      const { source } = await call(brandPath(clientId) + "/knowledge/files/" + pathId(file.name.toLowerCase()), file);
+      return { data: { uploads: [sourceRow(source, clientId)] } };
+    },
     async addKnowledgeSource({ clientId, title, url, areas }) {
       const { source } = await call(brandPath(clientId) + "/knowledge/sources", { title, url, areas, sourceType: "link" });
       return { message: "Source registered. Processing is pending.", data: { uploads: [sourceRow(source, clientId)] } };
@@ -324,6 +330,11 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
       return { data: { posts: [{ ...postRow(record, String(record.clientId), projectId),
         draftVersions, reviewDecisions, copy: current?.text ?? record.copy,
         version: current?.version ?? record.version }] } };
+    },
+    async startRun({ projectId, briefId, currentVersion }) {
+      const { record, stageExecutions } = await call(projectPath(projectId) + "/runs", { briefId, currentVersion });
+      const run = { ...runRow(record, String(record.clientId), projectId), stageExecutions };
+      return { runId: run.id, data: { runs: [run] } };
     },
     async saveBrief({ projectId, values }) {
       const { brief } = await call("/workflow/projects/" + pathId(projectId) + "/briefs", values);

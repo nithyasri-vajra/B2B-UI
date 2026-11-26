@@ -1,37 +1,23 @@
 import { useState } from "react";
-import { Button, Card, Field, Page, Table, useAction } from "./AdminControls";
-import { isPlatformAdmin } from "./access";
+import { Button, Card, Field, useAction } from "./AdminControls";
 
-export function LiveSources({ data, client, action, link, readOnly }) {
+export function AddKnowledgeLink({ action }) {
   const { submit, busy, feedback } = useAction(action);
-  const sources = data.uploads.filter((row) => row.clientId === client?.id);
-  return <Page className="knowledge-readiness" title="Knowledge" description={client?.name}>
-    <nav className="knowledge-readiness-tabs" aria-label="Knowledge sections">
-      <a {...link("Readiness.dc.html")}>Readiness</a>
-      <span aria-current="page">Sources</span>
-      <a {...link("RecordReview.dc.html")}>Records</a>
-    </nav>
-    {data.brandKnowledgeLoadError && <p role="alert">Some knowledge data could not be loaded. Reload to retry.</p>}
+  return <Card title="Add a link">
+    <form className="admin-form" onSubmit={(event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const fields = new FormData(form);
+      const areas = fields.get("areas").split(",").map((area) => area.trim()).filter(Boolean);
+      submit("addKnowledgeSource", { title: fields.get("title"), url: fields.get("url"), areas }, () => form.reset());
+    }}>
+      <Field label="Title"><input name="title" required /></Field>
+      <Field label="Source URL"><input name="url" type="url" required /></Field>
+      <Field label="Knowledge areas (comma separated)"><input name="areas" required /></Field>
+      <Button primary type="submit" disabled={busy}>Add link</Button>
+    </form>
     {feedback}
-    {client && (!readOnly || isPlatformAdmin(data.session)) && <Card title="Add a link">
-      <form className="admin-form" onSubmit={(event) => {
-        event.preventDefault();
-        const form = event.currentTarget;
-        const fields = new FormData(form);
-        const areas = fields.get("areas").split(",").map((area) => area.trim()).filter(Boolean);
-        submit("addKnowledgeSource", { title: fields.get("title"), url: fields.get("url"), areas }, () => form.reset());
-      }}>
-        <Field label="Title"><input name="title" required /></Field>
-        <Field label="Source URL"><input name="url" type="url" required /></Field>
-        <Field label="Knowledge areas (comma separated)"><input name="areas" required /></Field>
-        <Button primary type="submit" disabled={busy}>Add link</Button>
-      </form>
-      <p className="muted">File upload is unavailable. Registered sources show their processing status below.</p>
-    </Card>}
-    <Card title="Sources"><Table headers={["Source", "Areas", "Type", "Processing"]}
-      empty="No knowledge sources registered."
-      rows={sources.map((row) => ({ key: row.id, cells: [row.name, row.domain, row.sourceType, row.status ?? "Unknown"] }))} /></Card>
-  </Page>;
+  </Card>;
 }
 
 export function NewKnowledgeRecord({ sources, action }) {

@@ -143,6 +143,7 @@ export function Clients({
         {tab === "Team" && <Card title="Add people">
           <p className="muted">Add work accounts or update brand assignments in Users and roles.</p>
           {link && <a className="btn pri" {...link("Users.dc.html")}>Open Users and roles</a>}
+          {data.usersLoadError && <p role="alert">{data.usersLoadError}</p>}
         </Card>}
         <div className={!brandSettings ? "brand-spaces-layout" : ["Profile", "Governance"].includes(tab) ? "brand-settings-profile" : undefined}>
         {!brandSettings && brandTable}
@@ -215,7 +216,7 @@ export function Clients({
                 <div><strong>{user.name ?? user.email}</strong>{user.name && <div className="muted">{user.email}</div>}</div>,
                 ...roles.map(([role]) => user.assignments[index].includes(role) ? "✓" : "—"),
               ] }))}
-              empty="No users assigned."
+              empty={data.usersLoadError ? "Member data unavailable." : "No users assigned."}
             />
           )}
           {tab === "Archive" && (

@@ -11,6 +11,7 @@ import {
   useAction,
 } from "./AdminControls";
 import "./knowledge-sources-records.css";
+import { isPlatformAdmin } from "./access";
 import { NewKnowledgeRecord, ReviseKnowledgeRecord } from "./LiveKnowledge";
 
 const states = [
@@ -80,7 +81,7 @@ export function Records({ action, data, client, link, readOnly = false }) {
     >
       <nav className="knowledge-readiness-tabs" aria-label="Knowledge sections">
         {link && <a {...link("Readiness.dc.html")}>Readiness</a>}
-        {link && !readOnly && <a {...link("KnowledgeSetup.dc.html")}>Sources</a>}
+        {link && (!readOnly || isPlatformAdmin(data.session)) && <a {...link("KnowledgeSetup.dc.html")}>Sources</a>}
         <span aria-current="page">Records</span>
       </nav>
       {!data.liveAccess && <Tabs values={views} value={view} onChange={setView} />}
