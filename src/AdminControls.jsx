@@ -96,7 +96,7 @@ export function Table({ headers, rows, empty = "No results." }) {
           {rows.length ? (
             rows.map((row, i) => (
               <tr key={row.key ?? i}>
-                {row.map((cell, j) => (
+                {(Array.isArray(row) ? row : row.cells).map((cell, j) => (
                   <td key={j}>{cell}</td>
                 ))}
               </tr>
