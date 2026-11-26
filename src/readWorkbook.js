@@ -88,10 +88,8 @@ export async function readWorkbook(file) {
     sheet.getAttribute("name").trim().toLowerCase(),
     Array.from(sheet.attributes).find((attribute) => attribute.localName === "id")?.value,
   ]));
-  if (!sheets.has("brief")) return { sheets, rows: [], date1904 };
   const sharedLink = links.find((link) => link.getAttribute("Type").endsWith("/sharedStrings"));
   const strings = sharedLink ? elements(await xml(target(sharedLink)), "si").map(richText) : [];
-  const sheet = await xml(target(links.find((link) => link.getAttribute("Id") === sheets.get("brief"))));
   function cellValue(cell) {
     const type = cell.getAttribute("t");
     const value = text(cell, "v");
@@ -102,15 +100,18 @@ export async function readWorkbook(file) {
     if (type === "n" || !type) return Number(value);
     return value;
   }
-  const rows = elements(sheet, "row").map((row, index) => {
-    const cells = new Map(elements(row, "c").map((cell, cellIndex) => [
-      cell.getAttribute("r")?.match(/^[A-Z]+/)?.[0] ?? ["A", "B"][cellIndex], cell,
-    ]));
-    return {
-      number: row.getAttribute("r") || index + 1,
-      label: cells.has("A") ? cellValue(cells.get("A")) : null,
-      value: cells.has("B") ? cellValue(cells.get("B")) : null,
-    };
-  });
-  return { sheets, rows, date1904 };
+  const tabs = new Map();
+  for (const name of ["brief", "1 period brief", "2 content focus", "3 kpi & target"]) {
+    if (!sheets.has(name)) continue;
+    const link = links.find((item) => item.getAttribute("Id") === sheets.get(name));
+    const sheet = await xml(target(link));
+    tabs.set(name, elements(sheet, "row").map((row, index) => ({
+      number: Number(row.getAttribute("r") || index + 1),
+      cells: Object.fromEntries(elements(row, "c").flatMap((cell) => {
+        const column = cell.getAttribute("r")?.match(/^[A-Z]+/)?.[0];
+        return column ? [[column, cellValue(cell)]] : [];
+      })),
+    })));
+  }
+  return { sheets, tabs, date1904 };
 }
