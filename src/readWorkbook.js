@@ -88,7 +88,6 @@ export async function readWorkbook(file) {
     sheet.getAttribute("name").trim().toLowerCase(),
     Array.from(sheet.attributes).find((attribute) => attribute.localName === "id")?.value,
   ]));
-
   const sharedLink = links.find((link) => link.getAttribute("Type").endsWith("/sharedStrings"));
   const strings = sharedLink ? elements(await xml(target(sharedLink)), "si").map(richText) : [];
   function cellValue(cell) {
@@ -108,10 +107,11 @@ export async function readWorkbook(file) {
     const sheet = await xml(target(link));
     tabs.set(name, elements(sheet, "row").map((row, index) => ({
       number: Number(row.getAttribute("r") || index + 1),
-      cells: Object.fromEntries(elements(row, "c").map((cell) => [
-        cell.getAttribute("r").match(/^[A-Z]+/)[0], cellValue(cell),
-      ])),
+      cells: Object.fromEntries(elements(row, "c").flatMap((cell) => {
+        const column = cell.getAttribute("r")?.match(/^[A-Z]+/)?.[0];
+        return column ? [[column, cellValue(cell)]] : [];
+      })),
     })));
   }
-  return { tabs, date1904 };
+  return { sheets, tabs, date1904 };
 }
