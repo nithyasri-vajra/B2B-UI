@@ -1,3 +1,4 @@
+import { rolesForClient } from "./access";
 import { useEffect, useRef, useState } from "react";
 import {
   Button,
@@ -135,7 +136,21 @@ function PlanItemReview({ data, client, run, href, action, canAct = () => true }
   const [reason, setReason] = useState("");
   const [draft, setDraft] = useState(null);
   const { submit, busy, feedback } = useAction(action);
-  const items =
+  const live = data.liveAccess;
+  const plan = run?.planRevisions?.at(-1);
+  const review = (data.reviewDecisions ?? []).find((entry) =>
+    entry.gate === "gate_1" && String(entry.runId) === run?.id && entry.planVersion === plan?.version);
+  const userId = data.session?.id ?? data.session?.userId;
+  const canRequest = live && !review && run?.currentStageKey === "gate_1" &&
+    !["awaiting_plan_approval", "plan_approved", "plan_changes_requested"].includes(run.status) &&
+    (!userId || String(run.ownerUserId) === String(userId)) &&
+    rolesForClient(data.session, client?.id).some((role) => ["approver", "marketing_operator"].includes(role));
+  const assignedIds = review?.selectedPlanItemIds?.map(String) ?? [];
+  const items = live ? (plan?.items ?? []).map((item) => ({
+    ...item, id: String(item.itemId), title: item.title ?? item.topic ?? item.angle,
+    cta: item.cta ?? item.callToAction, version: plan.version,
+    status: canRequest || assignedIds.includes(String(item.itemId)) ? "Awaiting approval" : "Planned",
+  })) :
     run && client
       ? data.plans.filter(
           (item) => item.clientId === client.id && item.runId === run.id,
@@ -144,7 +159,7 @@ function PlanItemReview({ data, client, run, href, action, canAct = () => true }
   const reviewable = items.filter(
     (item) => item.status === "Awaiting approval",
   );
-  const chosen = reviewable.filter((item) => selected.includes(item.id));
+  const chosen = reviewable.filter((item) => (review ? assignedIds : selected).includes(item.id));
   const reviewKey = JSON.stringify(
     chosen.map((item) => [item.id, item.version]),
   );
@@ -154,7 +169,7 @@ function PlanItemReview({ data, client, run, href, action, canAct = () => true }
     setConfirm(kind);
   }
   const editable = canAct("editPlanItem") && run?.canEditPlan !== false;
-  const canDecide = canAct("approvePlan") && run?.canApprovePlan !== false;
+  const canDecide = live ? Boolean(review || canRequest) : canAct("approvePlan") && run?.canApprovePlan !== false;
 
   function toggle(id) {
     setSelected((current) =>
@@ -166,6 +181,21 @@ function PlanItemReview({ data, client, run, href, action, canAct = () => true }
   function decide(event) {
     event.preventDefault();
     if (stale || !chosen.length) return;
+    if (live) {
+      const payload = review ? {
+        projectId: String(review.projectId), reviewId: review._id,
+        decision: confirm === "approve" ? "approved" : "rejected", reason: reason.trim(),
+      } : {
+        runId: run.id, planVersion: plan.version,
+        selectedPlanItemIds: chosen.map(({ id }) => id), askApprover: requiresApprover,
+      };
+      submit(review ? "decideReview" : "requestPlanApproval", payload, () => {
+        setConfirm("");
+        setReason("");
+        setSelected([]);
+      });
+      return;
+    }
     submit(
       confirm === "approve" ? "approvePlan" : "rejectPlan",
       {
@@ -197,6 +227,7 @@ function PlanItemReview({ data, client, run, href, action, canAct = () => true }
         </WorkflowLink>
       }
     >
+      {live && !confirm && feedback}
       {run && <div className="plan-review-summary" aria-label="Plan summary">
         <Card title="Posts"><strong>{items.length}</strong><span>{reviewable.length} awaiting approval</span></Card>
         <Card title="Pillar mix">
@@ -219,31 +250,31 @@ function PlanItemReview({ data, client, run, href, action, canAct = () => true }
             value={view}
             onChange={setView}
           />
-          {canAct("approvePlan") && <div className="admin-actions">
+          {canDecide && <div className="admin-actions">
             <span className="muted">{chosen.length} selected</span>
-            <Button
+            {(!live || review) && <Button
               disabled={!canDecide || !chosen.length || busy}
               onClick={() => confirmDecision("reject")}
             >
               Reject selected
-            </Button>
+            </Button>}
             <button
               type="button"
               className="btn gate"
               disabled={!canDecide || !chosen.length || busy}
               onClick={() => confirmDecision("approve")}
             >
-              Approve {chosen.length || ""} selected
+              {canRequest ? "Request plan review" : "Approve " + (chosen.length || "") + " selected"}
             </button>
           </div>}
         </div>
         {view === "Table" ? (
           <Table
             headers={[
-              canAct("approvePlan") && <input
+              canDecide && <input
                 aria-label="Select all pending items"
                 type="checkbox"
-                disabled={!reviewable.length || !canDecide}
+                disabled={Boolean(review) || !reviewable.length || !canDecide}
                 checked={Boolean(
                   reviewable.length && chosen.length === reviewable.length,
                 )}
@@ -266,14 +297,14 @@ function PlanItemReview({ data, client, run, href, action, canAct = () => true }
               "",
             ]}
             rows={items.map((item) => [
-              canAct("approvePlan") && <input
+              canDecide && <input
                 aria-label={"Select " + item.title}
                 type="checkbox"
                 checked={
-                  selected.includes(item.id) &&
+                  (review ? assignedIds : selected).includes(item.id) &&
                   item.status === "Awaiting approval"
                 }
-                disabled={!canDecide || item.status !== "Awaiting approval"}
+                disabled={Boolean(review) || !canDecide || item.status !== "Awaiting approval"}
                 onChange={() => toggle(item.id)}
               />,
               item.scheduledAt ?? "—",
@@ -399,7 +430,7 @@ function PlanItemReview({ data, client, run, href, action, canAct = () => true }
       {confirm && (
         <ReviewDialog
           title={
-            confirm === "approve"
+            canRequest ? "Request plan review?" : confirm === "approve"
               ? "Approve " + chosen.length + " plan items?"
               : "Reject " + chosen.length + " plan items?"
           }
@@ -419,7 +450,7 @@ function PlanItemReview({ data, client, run, href, action, canAct = () => true }
                 </li>
               ))}
             </ul>
-            {confirm === "approve" ? (
+            {confirm === "approve" ? ((!live || canRequest) && (
               <label>
                 <input
                   type="checkbox"
@@ -430,7 +461,7 @@ function PlanItemReview({ data, client, run, href, action, canAct = () => true }
                 />{" "}
                 Ask Approver to review
               </label>
-            ) : (
+            )) : (
               <Field label="Reason">
                 <textarea
                   rows={3}
@@ -452,8 +483,7 @@ function PlanItemReview({ data, client, run, href, action, canAct = () => true }
                   (confirm === "reject" && !reason.trim())
                 }
               >
-                {confirm === "approve" ? "Approve " : "Reject "}
-                {chosen.length} items
+                {canRequest ? "Request review" : (confirm === "approve" ? "Approve " : "Reject ") + chosen.length + " items"}
               </Button>
               <Button onClick={() => setConfirm("")}>Cancel</Button>
             </div>

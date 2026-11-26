@@ -83,7 +83,7 @@ export function Records({ action, data, client, link, readOnly = false }) {
         {link && !readOnly && <a {...link("KnowledgeSetup.dc.html")}>Sources</a>}
         <span aria-current="page">Records</span>
       </nav>
-      {!data.liveAccess && <Tabs values={views} value={view} onChange={setView} />}
+      <Tabs values={views} value={view} onChange={setView} />
       {data.brandKnowledgeLoadError && <p role="alert">Some knowledge data could not be loaded. Reload to retry.</p>}
       {data.liveAccess && !readOnly && client && <NewKnowledgeRecord
         sources={data.uploads.filter((row) => row.clientId === client.id)} action={action} />}

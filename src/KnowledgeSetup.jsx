@@ -1,18 +1,15 @@
 import { useRef, useState } from "react";
-import { Button, Card, Chip, Page, useAction } from "./AdminControls";
+import { Button, Card, Chip, Field, Page, Table, useAction } from "./AdminControls";
 
 import { knowledgeFiles } from "./extractKnowledgeRecords";
 import "./knowledge-sources-records.css";
-import { LiveSources } from "./LiveKnowledge";
+import { isPlatformAdmin } from "./access";
 
-export default function KnowledgeSetup(props) {
-  return props.data.liveAccess ? <LiveSources {...props} /> : <PreviewKnowledgeSetup {...props} />;
-}
-
-function PreviewKnowledgeSetup({
+export default function KnowledgeSetup({
   link,
   action,
   onFiles,
+  readOnly,
   client,
   data,
 }) {
@@ -22,15 +19,26 @@ function PreviewKnowledgeSetup({
   const selectedKnowledgeFile = useRef(null);
   const folderUploadInProgress = useRef(false);
   const [folderUpload, setFolderUpload] = useState(null);
+  async function uploadSources(files, domain) {
+    if (!data.liveAccess) return onFiles(files, domain);
+    const errors = [];
+    for (const file of files) {
+      try {
+        await action("uploadKnowledgeFile", { file, domain });
+      } catch (error) {
+        errors.push(file.name + ": " + error.message);
+      }
+    }
+    if (errors.length) throw new Error(errors.join(" "));
+    return { message: files.length === 1 ? "Source uploaded." : "Sources uploaded." };
+  }
   const { submit, busy, feedback } = useAction((name, payload) =>
-    name === "uploadSources"
-      ? onFiles(payload.files, payload.domain)
-      : action(name, payload),
+    name === "uploadSources" ? uploadSources(payload.files, payload.domain) : action(name, payload),
   );
   const uploads = data.uploads.filter((item) => item.clientId === client?.id);
   const readiness = data.readiness.find((item) => item.clientId === client?.id);
   const isUploadingFolder = folderUpload?.active ?? false;
-  const controlsBusy = busy || isUploadingFolder || data.liveAccess;
+  const controlsBusy = busy || isUploadingFolder || (data.liveAccess && readOnly && !isPlatformAdmin(data.session));
   const currentFolder = folderUpload?.clientId === client?.id ? folderUpload : null;
   const fileStatuses = knowledgeFiles.map(({ name }) => {
     const savedUpload = uploads.findLast((item) => item.name?.toLowerCase() === name);
@@ -86,7 +94,7 @@ function PreviewKnowledgeSetup({
       for (const [index, { name, domain, files }] of matches.entries()) {
         setFileStatus(name, "Uploading");
         try {
-          const result = await onFiles(files, domain);
+          const result = await uploadSources(files, domain);
           const failed = result?.data?.uploads?.some((item) =>
             item.name?.toLowerCase() === name &&
             ["failed", "error", "rejected"].includes(item.status?.toLowerCase()),
@@ -128,12 +136,12 @@ function PreviewKnowledgeSetup({
       description="Upload and review sources for the selected client."
       actions={
         <>
-          <Button
+          {!data.liveAccess && <Button
             disabled={!client || controlsBusy}
             onClick={() => submit("saveKnowledgeSetup")}
           >
             Save setup
-          </Button>
+          </Button>}
           <a className="btn pri" {...link("RecordReview.dc.html")}>
             Next: review records
           </a>
@@ -150,7 +158,28 @@ function PreviewKnowledgeSetup({
           <a {...link("#new-client")}>Create a client</a> to enable folder uploads.
         </p>
       )}
-      {data.liveAccess && <p role="status">Knowledge source uploads are unavailable on the connected backend.</p>}
+      {data.liveAccess && client && <>
+        {data.brandKnowledgeLoadError && <p role="alert">Some knowledge data could not be loaded.</p>}
+        {(!readOnly || isPlatformAdmin(data.session)) && <Card title="Add a link">
+          <form className="admin-form" onSubmit={(event) => {
+            event.preventDefault();
+            const form = event.currentTarget;
+            const fields = new FormData(form);
+            const areas = fields.get("areas").split(",").map((area) => area.trim()).filter(Boolean);
+            submit("addKnowledgeSource", { title: fields.get("title"), url: fields.get("url"), areas }, () => form.reset());
+          }}>
+            <Field label="Title"><input name="title" required /></Field>
+            <Field label="Source URL"><input name="url" type="url" required /></Field>
+            <Field label="Knowledge areas"><input name="areas" required placeholder="Comma-separated areas" /></Field>
+            <Button primary type="submit" disabled={busy}>Add link</Button>
+          </form>
+        </Card>}
+        <Card title="Registered sources">
+          <Table headers={["Source", "Areas", "Type", "Processing"]}
+            rows={uploads.map((row) => [row.name, row.domain, row.sourceType, row.status ?? "Unknown"])} />
+        </Card>
+        <p className="muted">Maximum file size is 2 MiB per file.</p>
+      </>}
       <div className="knowledge-source-layout"
         style={{
           display: "flex",

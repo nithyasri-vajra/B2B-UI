@@ -31,11 +31,24 @@ export default function ApprovalsQueue({ data, client, href, action }) {
   const brandNames = new Map(brands.map(({ id, name }) => [id, name]));
   const findRun = (item) => data.runs.find(({ id, clientId }) => id === item.runId && clientId === item.clientId);
   const agentId = (item) => item.agentId ?? findRun(item)?.agentId;
-  const accessible = data.approvals.filter((item) => {
+  const approvals = data.liveAccess
+    ? (data.reviewDecisions ?? []).map((review) => ({
+      id: String(review._id),
+      clientId: String(review.clientId),
+      runId: String(review.runId),
+      postId: review.contentItemId == null ? undefined : String(review.contentItemId),
+      gate: review.gate === "gate_1" ? 1 : 2,
+      status: "Pending",
+      dueAt: review.dueAt,
+      waitingSince: review.requestedAt,
+    }))
+    : data.approvals;
+  const accessible = approvals.filter((item) => {
     if (!brandNames.has(item.clientId) || ![1, 2].includes(item.gate)) return false;
     if (session?.status !== "active") return true;
     const run = findRun(item);
     if (!run) return false;
+    if (data.liveAccess) return true;
     return canPerformAction(session, item.clientId, item.gate === 1 ? "approvePlan" : "approvePost", run, { separation: run.separation === true });
   });
   const agents = [...new Set(accessible.map(agentId).filter(Boolean))];
@@ -78,7 +91,7 @@ export default function ApprovalsQueue({ data, client, href, action }) {
         (!profile.clientId || profile.clientId === item.clientId),
     );
     const ready =
-      item.clientId === client?.id && item.canApprove !== false &&
+      !data.liveAccess && item.clientId === client?.id && item.canApprove !== false &&
       post?.status === "Awaiting approval" &&
       post.version != null &&
       post.scheduledAt &&
@@ -121,6 +134,7 @@ export default function ApprovalsQueue({ data, client, href, action }) {
           {agents.map((id) => <option key={id} value={id}>{data.agents.find((entry) => entry.id === id)?.name ?? id}</option>)}
         </select>
       </>}>
+      {data.liveAccess && data.approvalsLoadError && <p role="alert">{data.approvalsLoadError}</p>}
       <Card>
         <div className="admin-row">
           <Tabs
@@ -147,7 +161,7 @@ export default function ApprovalsQueue({ data, client, href, action }) {
               setSelected([]);
             }}
           />
-          {view === tabs[1] && (
+          {!data.liveAccess && view === tabs[1] && (
             <button
               type="button"
               className="btn gate"

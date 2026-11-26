@@ -73,6 +73,7 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
   const endpoint = base.pathname.replace(/\/$/, "");
 
   async function call(path, payload, method = payload === undefined ? "GET" : "POST") {
+    const multipart = payload instanceof FormData;
     const response = await request(endpoint + path, {
       method,
       credentials: "same-origin",
@@ -80,9 +81,9 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
       redirect: "error",
       headers: {
         Accept: "application/json",
-        ...(payload === undefined ? {} : { "Content-Type": "application/json" }),
+        ...(payload === undefined || multipart ? {} : { "Content-Type": "application/json" }),
       },
-      body: payload === undefined ? undefined : JSON.stringify(payload),
+      body: multipart ? payload : payload === undefined ? undefined : JSON.stringify(payload),
     });
 
     if (response.status === 401 && path === "/session")
@@ -211,6 +212,16 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
         failed: [report, uploads, entries].some(({ status }) => status === "rejected"),
       };
     },
+    async uploadKnowledgeFile({ clientId, file, domain }) {
+      const body = new FormData();
+      body.append("file", file);
+      body.append("areas", domain);
+      const { source, record } = await call(brandPath(clientId) + "/knowledge/sources/upload", body);
+      return { data: {
+        uploads: [sourceRow(source, clientId)],
+        ...(record ? { records: [knowledgeRow(record, clientId)] } : {}),
+      } };
+    },
     async addKnowledgeSource({ clientId, title, url, areas }) {
       const { source } = await call(brandPath(clientId) + "/knowledge/sources", { title, url, areas, sourceType: "link" });
       return { message: "Source registered. Processing is pending.", data: { uploads: [sourceRow(source, clientId)] } };
@@ -271,6 +282,11 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
       return { data: { posts: [{ ...record, id: postId, clientId: String(record.clientId), projectId,
         runId: String(record.runId), draftVersions, reviewDecisions, copy: current?.text ?? record.copy,
         version: current?.version ?? record.version }] } };
+    },
+    async saveRunDraft({ projectId, briefId, briefVersion }) {
+      const { run } = await call(projectPath(projectId) + "/runs/drafts", { briefId, briefVersion });
+      const saved = { ...scoped(run, String(run.clientId)), projectId, status: label(run.status) };
+      return { runId: saved.id, data: { runs: [saved] }, message: "Run draft saved." };
     },
     async saveBrief({ projectId, values }) {
       const { brief } = await call("/workflow/projects/" + pathId(projectId) + "/briefs", values);
