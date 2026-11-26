@@ -234,7 +234,7 @@ export function Records({ action, data, client, link, readOnly = false }) {
             <Button onClick={() => setId(null)}>Close</Button>
           </header>
           <div className="knowledge-record-body">
-            {data.liveAccess && !readOnly && <ReviseKnowledgeRecord key={record.id} record={record} action={action} />}
+            {data.liveAccess && !readOnly && <ReviseKnowledgeRecord key={record.id + ":" + record.currentRevision} record={record} action={action} />}
             {draft ? (
               <form
                 className="admin-form"

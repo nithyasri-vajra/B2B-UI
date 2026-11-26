@@ -65,11 +65,12 @@ export function NewKnowledgeRecord({ sources, action }) {
 }
 
 export function ReviseKnowledgeRecord({ record, action }) {
+  const [revision] = useState(record.currentRevision);
   const { submit, busy, feedback } = useAction(action);
-  return <><form key={record.currentRevision} className="admin-form" onSubmit={(event) => {
+  return <form className="admin-form" onSubmit={(event) => {
     event.preventDefault();
     const fields = new FormData(event.currentTarget);
-    submit("reviseKnowledgeRecord", { ...Object.fromEntries(fields), id: record.id, currentRevision: record.currentRevision });
+    submit("reviseKnowledgeRecord", { ...Object.fromEntries(fields), id: record.id, currentRevision: revision });
   }}>
     <Field label="Statement"><textarea name="statement" defaultValue={record.item} required /></Field>
     <Field label="Evidence grade"><select name="evidenceGrade" defaultValue={record.grade ?? ""}>
@@ -79,5 +80,6 @@ export function ReviseKnowledgeRecord({ record, action }) {
       {["captured", "verified", "approved", "disputed", "superseded", "expired", "rejected"].map((state) => <option key={state}>{state}</option>)}
     </select></Field>
     <Button primary type="submit" disabled={busy}>Save revision</Button>
-  </form>{feedback}</>;
+    {feedback}
+  </form>;
 }

@@ -5,7 +5,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), ["OPENAI_", "B2B_"]);
   const authPath = loadEnv(mode, process.cwd(), "VITE_AUTH_API_PATH").VITE_AUTH_API_PATH;
   const authProxy = authPath === "/api/auth"
-    ? { "/api/auth": "https://b2b-backend-387a.onrender.com" }
+    ? { "/api/auth": "http://127.0.0.1:3001" }
     : undefined;
   const configure = (server) => {
     if (!authPath) previewRunMiddleware(server, env);

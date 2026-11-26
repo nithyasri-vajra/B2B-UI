@@ -96,7 +96,7 @@ export function Table({ headers, rows, empty = "No results." }) {
           {rows.length ? (
             rows.map((row, i) => (
               <tr key={row.key ?? i}>
-                {(Array.isArray(row) ? row : row.cells).map((cell, j) => (
+                {row.map((cell, j) => (
                   <td key={j}>{cell}</td>
                 ))}
               </tr>
@@ -113,20 +113,20 @@ export function Table({ headers, rows, empty = "No results." }) {
 }
 
 export function useAction(action) {
-  const [notice, setNotice] = useState(null);
+  const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function submit(name, payload, update) {
     setBusy(true);
-    setNotice(null);
+    setMessage("");
     try {
       const result = await action(name, payload);
       if (result === false) return false;
       update?.();
-      if (result?.message) setNotice({ message: result.message });
+      setMessage(result?.message ?? "");
       return true;
     } catch (error) {
-      setNotice({ error: true, message: error?.message || "The action could not be completed." });
+      setMessage(error?.message || "The action could not be completed.");
       return false;
     } finally {
       setBusy(false);
@@ -135,9 +135,9 @@ export function useAction(action) {
   return {
     submit,
     busy,
-    feedback: notice && (
-      <p className="muted" role={notice.error ? "alert" : "status"}>
-        {notice.message}
+    feedback: message && (
+      <p className="muted" role="status">
+        {message}
       </p>
     ),
   };

@@ -175,14 +175,6 @@ export function B2BAgents({
     const result = await store.dispatch(name, { ...payload, clientId: scopedClient,
       projectId: actionRun?.projectId ?? payload.projectId });
     if (data.liveAccess && ["decideReview", "cancelRun", "requestPlanApproval", "savePostDraft"].includes(name)) {
-      if (name === "decideReview" || name === "cancelRun" || name === "savePostDraft") {
-        const reviews = store.getSnapshot().reviewDecisions ?? [];
-        store.ingest({ reviewDecisions: reviews.filter((review) =>
-          name === "decideReview" ? String(review._id) !== String(payload.reviewId) :
-          name === "cancelRun" ? String(review.runId) !== String(payload.runId) :
-          String(review.contentItemId) !== String(payload.postId) ||
-          String(review.draftVersionId) !== String(payload.currentDraftVersionId)) });
-      }
       await store.dispatch("refreshApprovals");
       if (name === "decideReview") {
         const request = assignedReview.contentItemId
@@ -260,16 +252,16 @@ export function B2BAgents({
   }
 
   const view = page;
-  const showSetup = pageAllowed && !data.liveAccess && view === "home" &&
+  const showSetup = pageAllowed && !data.liveAccess && view === "new-run" && !params.has("run") &&
     needsFirstRunSetup(client, data.readiness.find((report) => report.clientId === client?.id));
   const liveScreen = data.liveAccess && { approvals: LiveApprovals, plan: LivePlan, post: LivePost }[view];
-  const Screen = liveScreen || (screens[view] ?? OperatorHome);
+  const Screen = showSetup ? OperatorHome : liveScreen || (screens[view] ?? OperatorHome);
   const clientHref = (target, parameters) => allowed(target) ? workflowHref(target, { client: client?.id, ...parameters }) : undefined;
   const clientNavigate = (target, parameters) => navigate(target, { client: client?.id, ...parameters });
   return (
     <WorkflowShell
       logout={logout}
-      page={view}
+      page={showSetup ? "home" : view}
       data={data}
       clients={clients}
       client={client}
@@ -353,14 +345,11 @@ if (mount && authApiPath) {
           data.approvalsLoadError = error.message;
         }
         if (isPlatformAdmin(data.session)) {
-          const [users, agents] = await Promise.allSettled([
-            auth.services.loadUsers(),
-            auth.services.loadAgents(),
-          ]);
-          if (users.status === "fulfilled") data.users = users.value.data.users;
-          else data.usersLoadError = users.reason.message;
-          if (agents.status === "fulfilled") data.agents = agents.value;
-          else data.agentsLoadError = agents.reason.message;
+          try {
+            data.users = (await auth.services.loadUsers()).data.users;
+          } catch (error) {
+            data.usersLoadError = error.message;
+          }
         }
       }
       data.liveAccess = true;

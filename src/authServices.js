@@ -44,30 +44,12 @@ const projectPath = (id) => "/workflow/projects/" + pathId(id);
 const label = (value) => typeof value === "string"
   ? value.replace(/_/g, " ").replace(/^./, (letter) => letter.toUpperCase()) : undefined;
 const scoped = (row, clientId) => ({ ...row, id: String(row.id ?? row._id), clientId });
-const reference = (value) => value == null ? undefined : String(value);
-const workflowRow = (row, clientId, projectId) => ({ ...scoped(row, clientId), projectId });
-const runRow = (row, clientId, projectId) => ({
-  ...workflowRow(row, clientId, projectId),
-  agentId: reference(row.agentId),
-  briefId: reference(row.briefId),
-  status: {
-    awaiting_plan_approval: "Awaiting Gate 1",
-    awaiting_output_approval: "Awaiting Gate 2",
-  }[row.status] ?? label(row.status),
-});
-const postRow = (row, clientId, projectId) => ({
-  ...workflowRow(row, clientId, projectId),
-  runId: reference(row.runId),
-  agentId: reference(row.agentId),
-  status: label(row.status),
-  scheduledAt: row.publishing?.scheduledAt ?? row.scheduledAt,
-});
 const sourceRow = (row, clientId) => ({
   ...scoped(row, clientId), name: row.title ?? row.name, status: label(row.processingStatus),
   domain: row.areas?.join(", "),
 });
 const knowledgeRow = (row, clientId) => {
-  const revision = row.revisions?.find((entry) => entry.revision === row.currentRevision);
+  const revision = row.revisions.find((entry) => entry.revision === row.currentRevision);
   return { ...scoped(row, clientId), domain: row.area, item: revision?.statement,
     title: revision?.statement, quote: revision?.statement, state: label(revision?.reviewStatus),
     grade: revision?.evidenceGrade, reuse: label(revision?.usagePermission),
@@ -101,8 +83,6 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
         ...(payload === undefined ? {} : { "Content-Type": "application/json" }),
       },
       body: payload === undefined ? undefined : JSON.stringify(payload),
-    }).catch(() => {
-      throw new Error("Could not reach the app service. Check your connection and try again.");
     });
 
     if (response.status === 401 && path === "/session")
@@ -113,7 +93,7 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
     const isJson = response.headers.get("content-type")?.includes("application/json");
     const result = isJson ? await response.json() : null;
     if (!response.ok || !result || typeof result !== "object" || Array.isArray(result)) {
-      const error = new Error(result?.message || result?.detail || ({
+      const error = new Error(result?.message || ({
         401: "Sign in again to continue.",
         403: "You do not have permission to perform this action.",
         404: "This record or endpoint is unavailable.",
@@ -155,14 +135,7 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
 
   async function saveAccess(payload) {
     const result = await call("/user-access", payload);
-    const messages = {
-      pre_add: "User added.",
-      suspend: "User suspended.",
-      remove_client: "Brand access removed.",
-      decline: "Access request declined.",
-    };
-    return { message: messages[payload.action] ?? result.message ?? "User access saved.",
-      data: { users: result.data.users.map(toAdminUser) } };
+    return { message: result.message, data: { users: result.data.users.map(toAdminUser) } };
   }
 
   async function readBrandWorkflow(clientId) {
@@ -171,11 +144,12 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
       const projectId = String(project.id ?? project._id);
       const base = "/workflow/projects/" + pathId(projectId);
       const [briefs, runs, posts] = await Promise.all(["briefs", "runs", "posts"].map((name) => call(base + "/" + name)));
+      const scoped = (record) => ({ ...record, id: String(record.id ?? record._id), clientId, projectId });
       return {
         projects: [{ ...project, id: projectId, clientId }],
-        briefs: briefs.briefs.map((row) => workflowRow(row, clientId, projectId)),
-        runs: runs.runs.map((row) => runRow(row, clientId, projectId)),
-        posts: posts.contentItems.map((row) => postRow(row, clientId, projectId)),
+        briefs: briefs.briefs.map(scoped),
+        runs: runs.runs.map((record) => ({ ...scoped(record), briefId: record.briefId == null ? undefined : String(record.briefId) })),
+        posts: posts.contentItems.map((record) => ({ ...scoped(record), runId: record.runId == null ? undefined : String(record.runId) })),
       };
     }));
     return Object.fromEntries(["projects", "briefs", "runs", "posts"].map((key) => [key, batches.flatMap((batch) => batch[key])]));
@@ -202,29 +176,10 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
     async loadClients() {
       return { data: { clients: await readClients() } };
     },
-    async loadAgents() {
-      const { agents } = await call("/workflow/agents");
-      return agents.map((agent) => {
-        const version = agent.versions?.find((item) => item.version === agent.currentVersion);
-        return {
-          ...agent,
-          id: String(agent.id ?? agent._id),
-          status: label(agent.releaseStatus),
-          version: agent.currentVersion,
-          limits: version?.runLimits,
-          pipeline: version?.pipeline?.map((step) => ({ ...step, name: step.stageKey })),
-        };
-      });
-    },
     async createClient({ values }) {
       const { name, website, timezone, brandManagerUserId, industry, language } = values;
       const { data, message } = await call("/clients", { name, website, timezone, brandManagerUserId, industry, spelling: language });
-      const clients = (data.clients ?? data.brands).map(toBrand);
-      try {
-        return { message: message ?? "Brand created.", data: { clients, users: await readUsers() } };
-      } catch {
-        return { message: "Brand created. The updated user list could not be loaded.", data: { clients } };
-      }
+      return { message, data: { clients: (data.clients ?? data.brands).map(toBrand) } };
     },
     readBrandWorkflow,
     async readBrand(clientId) {
@@ -235,15 +190,13 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
       const keys = tab === "Governance"
         ? ["defaultApproverUserId", "backupApproverUserId"] : ["name", "website", "timezone", "industry", "spelling"];
       const update = Object.fromEntries(keys.filter((key) => (values[key] ?? (key === "spelling" ? values.language : undefined)) != null)
-        .filter((key) => tab !== "Governance" || values[key])
-        .map((key) => [key, key === "spelling" ? values.language ?? values.spelling : values[key]]));
-      if (!Object.keys(update).length) throw new Error("Select an approver to save governance settings.");
+        .map((key) => [key, key === "spelling" ? values.language : values[key]]));
       const { brand } = await call(brandPath(clientId), update, "PATCH");
-      return { message: "Brand settings saved.", data: { clients: [toBrand(brand)] } };
+      return { data: { clients: [toBrand(brand)] } };
     },
     async archiveClient({ clientId }) {
       const { brand } = await call(brandPath(clientId), { status: "archived" }, "PATCH");
-      return { message: "Brand archived.", data: { clients: [toBrand(brand)] } };
+      return { data: { clients: [toBrand(brand)] } };
     },
     async readBrandKnowledge(clientId, { sources, records }) {
       const base = brandPath(clientId) + "/knowledge";
@@ -264,12 +217,12 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
     },
     async createKnowledgeRecord({ clientId, sourceId, area, recordType, statement }) {
       const { record } = await call(brandPath(clientId) + "/knowledge/records", { sourceId, area, recordType, statement });
-      return { message: "Knowledge record added.", data: { records: [knowledgeRow(record, clientId)] } };
+      return { data: { records: [knowledgeRow(record, clientId)] } };
     },
     async reviseKnowledgeRecord({ clientId, id, currentRevision, reviewStatus, statement, evidenceGrade }) {
       const { record } = await call(brandPath(clientId) + "/knowledge/records/" + pathId(id) + "/revisions",
         { currentRevision, reviewStatus, statement, evidenceGrade });
-      return { message: "Knowledge record updated.", data: { records: [knowledgeRow(record, clientId)] } };
+      return { data: { records: [knowledgeRow(record, clientId)] } };
     },
     async publishKnowledge({ clientId }) {
       const { knowledgeVersion } = await call(brandPath(clientId) + "/knowledge/versions", {});
@@ -283,32 +236,25 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
       try {
         return { data: { ...await services.loadApprovals(), approvalsLoadError: undefined } };
       } catch {
-        return { data: { approvalsLoadError: "Could not refresh the approvals list." } };
+        return { data: { reviewDecisions: [], approvalsLoadError: "Could not refresh reviews. Reload to retry." } };
       }
     },
     async cancelRun({ projectId, runId }) {
       const { run } = await call(projectPath(projectId) + "/runs/" + pathId(runId) + "/cancel", {});
-      return { message: "Run cancelled.", data: { runs: [runRow(run, String(run.clientId), projectId)] } };
+      return { data: { runs: [{ ...scoped(run, String(run.clientId)), projectId, status: label(run.status) }] } };
     },
     async requestPlanApproval({ projectId, runId, planVersion, selectedPlanItemIds, askApprover }) {
       await call(projectPath(projectId) + "/runs/" + pathId(runId) + "/plan-review",
         { planVersion, selectedPlanItemIds, askApprover });
-      try {
-        return { ...await services.loadRunDetail({ projectId, runId }), message: "Plan review requested." };
-      } catch {
-        return { message: "Plan review requested. The latest run details could not be loaded." };
-      }
+      return services.loadRunDetail({ projectId, runId });
     },
     async decideReview({ projectId, reviewId, decision, reason }) {
       await call(projectPath(projectId) + "/reviews/" + pathId(reviewId) + "/decision", { decision, reason });
       return { message: "Decision saved." };
     },
     async savePostDraft({ projectId, postId, currentDraftVersionId, text }) {
-      const { draft } = await call(projectPath(projectId) + "/posts/" + pathId(postId) + "/drafts", { currentDraftVersionId, text });
-      return { message: "Draft revision saved.", data: { posts: [{
-        id: postId, clientId: String(draft.clientId), projectId, status: "Draft",
-        currentDraftVersionId: String(draft._id), copy: draft.text, version: draft.version,
-      }] } };
+      await call(projectPath(projectId) + "/posts/" + pathId(postId) + "/drafts", { currentDraftVersionId, text });
+      return services.loadPostDetail({ projectId, postId });
     },
     async loadKnowledgeVersions({ projectId }) {
       const { knowledgeVersions } = await call("/workflow/projects/" + pathId(projectId) + "/knowledge");
@@ -316,13 +262,14 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
     },
     async loadRunDetail({ projectId, runId }) {
       const { record, stageExecutions, reviewDecisions } = await call("/workflow/projects/" + pathId(projectId) + "/runs/" + pathId(runId));
-      return { data: { runs: [{ ...runRow(record, String(record.clientId), projectId), stageExecutions, reviewDecisions }] } };
+      return { data: { runs: [{ ...record, id: runId, clientId: String(record.clientId), projectId,
+        briefId: record.briefId == null ? undefined : String(record.briefId), stageExecutions, reviewDecisions }] } };
     },
     async loadPostDetail({ projectId, postId }) {
       const { record, draftVersions, reviewDecisions } = await call("/workflow/projects/" + pathId(projectId) + "/posts/" + pathId(postId));
       const current = draftVersions.find((draft) => String(draft.id ?? draft._id) === String(record.currentDraftVersionId));
-      return { data: { posts: [{ ...postRow(record, String(record.clientId), projectId),
-        draftVersions, reviewDecisions, copy: current?.text ?? record.copy,
+      return { data: { posts: [{ ...record, id: postId, clientId: String(record.clientId), projectId,
+        runId: String(record.runId), draftVersions, reviewDecisions, copy: current?.text ?? record.copy,
         version: current?.version ?? record.version }] } };
     },
     async saveBrief({ projectId, values }) {
