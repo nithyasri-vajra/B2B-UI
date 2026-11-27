@@ -1,10 +1,14 @@
 import { useState } from "react";
 import { Button, Card, Field, Page, Table, useAction } from "./AdminControls";
 import { isPlatformAdmin } from "./access";
+import { knowledgeFileTypes } from "./authServices";
+
+const sourceAreas = (fields) => fields.get("areas").split(",").map((area) => area.trim()).filter(Boolean);
 
 export function LiveSources({ data, client, action, link, readOnly }) {
   const { submit, busy, feedback } = useAction(action);
   const sources = data.uploads.filter((row) => row.clientId === client?.id);
+  const canAddSource = client && (!readOnly || isPlatformAdmin(data.session));
   return <Page className="knowledge-readiness" title="Knowledge" description={client?.name}>
     <nav className="knowledge-readiness-tabs" aria-label="Knowledge sections">
       <a {...link("Readiness.dc.html")}>Readiness</a>
@@ -13,12 +17,12 @@ export function LiveSources({ data, client, action, link, readOnly }) {
     </nav>
     {data.brandKnowledgeLoadError && <p role="alert">Some knowledge data could not be loaded. Reload to retry.</p>}
     {feedback}
-    {client && (!readOnly || isPlatformAdmin(data.session)) && <Card title="Add a link">
+    {canAddSource && <Card title="Add a link">
       <form className="admin-form" onSubmit={(event) => {
         event.preventDefault();
         const form = event.currentTarget;
         const fields = new FormData(form);
-        const areas = fields.get("areas").split(",").map((area) => area.trim()).filter(Boolean);
+        const areas = sourceAreas(fields);
         submit("addKnowledgeSource", { title: fields.get("title"), url: fields.get("url"), areas }, () => form.reset());
       }}>
         <Field label="Title"><input name="title" required /></Field>
@@ -26,7 +30,22 @@ export function LiveSources({ data, client, action, link, readOnly }) {
         <Field label="Knowledge areas (comma separated)"><input name="areas" required /></Field>
         <Button primary type="submit" disabled={busy}>Add link</Button>
       </form>
-      <p className="muted">File upload is unavailable. Registered sources show their processing status below.</p>
+    </Card>}
+    {canAddSource && !client.archived && <Card title="File upload">
+      <form className="admin-form" onSubmit={(event) => {
+        event.preventDefault();
+        if (busy) return;
+        const form = event.currentTarget;
+        const fields = new FormData(form);
+        submit("addKnowledgeSource", { file: fields.get("file"), areas: [...new Set(sourceAreas(fields))] },
+          () => form.reset());
+      }}>
+        <Field label="Knowledge file (up to 2 MiB)">
+          <input name="file" type="file" accept={knowledgeFileTypes.join(",")} required />
+        </Field>
+        <Field label="Knowledge areas (comma separated)"><input name="areas" required /></Field>
+        <Button primary type="submit" disabled={busy}>Upload file</Button>
+      </form>
     </Card>}
     <Card title="Sources"><Table headers={["Source", "Areas", "Type", "Processing"]}
       empty="No knowledge sources registered."

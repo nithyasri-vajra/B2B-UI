@@ -1,4 +1,7 @@
 const sessionStatuses = new Set(["active", "pending", "denied", "expired"]);
+export const knowledgeFileTypes = [
+  ".md", ".pdf", ".docx", ".pptx", ".xlsx", ".csv", ".txt", ".vtt", ".png", ".jpg", ".jpeg", ".webp", ".gif",
+];
 const userStatuses = {
   active: "Active", pending: "Pending role", suspended: "Suspended",
   deactivated: "Deactivated in IdP",
@@ -73,6 +76,7 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
   const endpoint = base.pathname.replace(/\/$/, "");
 
   async function call(path, payload, method = payload === undefined ? "GET" : "POST") {
+    const multipart = payload instanceof FormData;
     const response = await request(endpoint + path, {
       method,
       credentials: "same-origin",
@@ -80,9 +84,9 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
       redirect: "error",
       headers: {
         Accept: "application/json",
-        ...(payload === undefined ? {} : { "Content-Type": "application/json" }),
+        ...(payload === undefined || multipart ? {} : { "Content-Type": "application/json" }),
       },
-      body: payload === undefined ? undefined : JSON.stringify(payload),
+      body: multipart || payload === undefined ? payload : JSON.stringify(payload),
     });
 
     if (response.status === 401 && path === "/session")
@@ -91,18 +95,33 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
       return { data: { session: null } };
 
     const isJson = response.headers.get("content-type")?.includes("application/json");
-    const result = isJson ? await response.json() : null;
+    const result = isJson ? await response.json().catch(() => null) : null;
     if (!response.ok || !result || typeof result !== "object" || Array.isArray(result)) {
-      const error = new Error(result?.message || ({
+      const workflow = path.startsWith("/workflow/") || /^\/(clients|run-context)(?:[/?]|$)/.test(path);
+      const guidance = typeof result?.retryGuidance === "string" ? result.retryGuidance : "";
+      const requestId = result?.requestId ?? response.headers.get("X-Request-Id");
+      const supplied = result?.message ?? result?.detail;
+      const fallback = ({
         401: "Sign in again to continue.",
         403: "You do not have permission to perform this action.",
         404: "This record or endpoint is unavailable.",
         409: "This record changed. Reload it before saving again.",
         400: "Check the required fields and try again.",
         422: "The supplied values do not meet the requirements for this action.",
-      })[response.status] || "The service could not complete this request.");
+      })[response.status] || (workflow && response.status >= 500
+        ? method === "GET" ? "Could not load workflow information. Try again shortly." :
+          "Could not complete the workflow action. Refresh and check whether the change was saved before retrying."
+        : "The service could not complete this request.");
+      const message = typeof supplied === "string" && supplied &&
+        !(workflow && supplied === "Could not complete the authentication request.") ? supplied : fallback;
+      const error = new Error([
+        message, guidance && !message.endsWith(guidance) ? guidance : "",
+        workflow && requestId ? "Reference: " + requestId : "",
+      ].filter(Boolean).join(" "));
       error.code = result?.code;
       error.status = response.status;
+      error.retryable = result?.retryable;
+      error.requestId = requestId;
       throw error;
     }
 
@@ -211,7 +230,24 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
         failed: [report, uploads, entries].some(({ status }) => status === "rejected"),
       };
     },
-    async addKnowledgeSource({ clientId, title, url, areas }) {
+    async addKnowledgeSource({ clientId, title, url, areas, file }) {
+      if (file !== undefined) {
+        if (!(file instanceof File) || !file.size) throw new Error("Choose one non-empty knowledge file.");
+        if (file.size > 2 * 1024 * 1024) throw new Error("Choose a knowledge file no larger than 2 MiB.");
+        const name = file.name.trim();
+        if (!knowledgeFileTypes.includes(name.slice(name.lastIndexOf(".")).toLowerCase()) ||
+            name.lastIndexOf(".") < 1 || name.length > 255)
+          throw new Error("Choose a supported knowledge file.");
+        if (!areas.length || areas.length > 20 || areas.some((area) => area.length > 100))
+          throw new Error("Enter 1 to 20 knowledge areas, up to 100 characters each.");
+        const form = new FormData();
+        form.append("file", file);
+        for (const area of areas) form.append("areas", area);
+        const { source, record } = await call(brandPath(clientId) + "/knowledge/sources/upload", form);
+        const upload = sourceRow(source, clientId);
+        return { message: "File uploaded. Processing status: " + (upload.status ?? "Unknown") + ".",
+          data: { uploads: [upload], ...(record ? { records: [knowledgeRow(record, clientId)] } : {}) } };
+      }
       const { source } = await call(brandPath(clientId) + "/knowledge/sources", { title, url, areas, sourceType: "link" });
       return { message: "Source registered. Processing is pending.", data: { uploads: [sourceRow(source, clientId)] } };
     },
@@ -275,6 +311,12 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
     async saveBrief({ projectId, values }) {
       const { brief } = await call("/workflow/projects/" + pathId(projectId) + "/briefs", values);
       return { data: { briefs: [{ ...brief, id: String(brief.id ?? brief._id), clientId: String(brief.clientId), projectId }] } };
+    },
+    async startRun({ clientId, projectId, briefId, briefVersion, agentKey, progressId }) {
+      if (progressId) return services.loadRunDetail({ projectId, runId: progressId });
+      const { run } = await call(projectPath(projectId) + "/runs", { clientId, briefId, briefVersion, agentKey });
+      const id = String(run._id);
+      return { runId: id, data: { runs: [{ ...run, id, clientId, projectId }] } };
     },
     async loadUsers() {
       return { data: { users: await readUsers() } };

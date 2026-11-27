@@ -1,6 +1,7 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button, Card, Chip, Field, Page, Table, useAction } from "./AdminControls";
 import { canStartRun, configuredAgent } from "./OperatorHome";
+import { validateBrief } from "./validateBrief";
 import "./run-flow.css";
 import periodBriefTemplate from "./period-brief-template.xlsx?url";
 
@@ -9,7 +10,7 @@ const briefFields = [
   ["audience", "Audience"], ["deliverables", "Deliverables"], ["kpi", "KPI"],
 ];
 
-function LiveBrief({ brief, projectId, action }) {
+function LiveBrief({ brief, projectId, client, action }) {
   const revision = brief?.versions?.find(({ version }) => version === brief.currentVersion);
   const [values, setValues] = useState(() => Object.fromEntries(briefFields.map(([key]) => {
     const value = key === "title" ? brief?.title : revision?.[key];
@@ -17,22 +18,72 @@ function LiveBrief({ brief, projectId, action }) {
   })));
   const { busy, submit, feedback } = useAction(action);
   const [saved, setSaved] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [validation, setValidation] = useState(null);
+
+  async function upload(file) {
+    if (!file || busy || checking) return;
+    setSaved(false);
+    setChecking(true);
+    setValidation(null);
+    try {
+      if (!/\.xlsx$/i.test(file.name) || file.size > 5 * 1024 * 1024)
+        throw new Error("Choose one .xlsx workbook no larger than 5 MB.");
+      const result = await validateBrief(file, client);
+      setValidation(result);
+      if (!result.validated) return;
+      const fields = new Map(Object.entries(result.fields).map(([key, value]) => [key.toLowerCase(), value]));
+      const read = (...keys) => keys.map((key) => fields.get(key)).find((value) => String(value ?? "").trim());
+      const metrics = Object.entries(result.fields).filter(([key]) => key.startsWith("KPI & Target / "));
+      setValues({
+        title: String(read("brief title", "period brief title", "title") ?? file.name.replace(/\.xlsx$/i, "")),
+        period: result.period,
+        objective: String(read("primary objective", "objective")),
+        audience: String(read("target audience", "audience")),
+        deliverables: String(read("deliverables") ?? result.postCount + " posts"),
+        kpi: String(read("kpi", "primary kpi") ?? metrics.map(([key, value]) => key.slice("KPI & Target / ".length) + ": " + value).join("\n")),
+      });
+    } catch (error) {
+      setValidation({ validated: false, issues: [{ location: "Workbook", message: error.message || "Choose a valid .xlsx workbook." }] });
+    } finally {
+      setChecking(false);
+    }
+  }
+
   return (
     <form className="admin-form" onSubmit={async (event) => {
       event.preventDefault();
+      if (busy || checking || saved || validation?.validated === false || (brief && !revision)) return;
       setSaved(false);
       const fields = Object.fromEntries(Object.entries(values).map(([key, value]) => [
         key, value === (typeof revision?.[key] === "object" ? JSON.stringify(revision[key]) : undefined) ? revision[key] : value.trim(),
       ]));
       if (Object.values(fields).some((value) => value === "")) return;
       await submit("saveBrief", { projectId, values: { ...fields,
+        ...(validation?.validated ? { workbook: {
+          fields: validation.fields, postCount: validation.postCount,
+        } } : {}),
         ...(brief ? { briefId: brief.id, currentVersion: brief.currentVersion } : {}),
       } }, () => setSaved(true));
     }}>
+      <Field label="Upload period brief (.xlsx)">
+        <input type="file" accept=".xlsx" disabled={busy || checking} onChange={(event) => {
+          const file = event.currentTarget.files[0];
+          event.currentTarget.value = "";
+          upload(file);
+        }} />
+      </Field>
+      {checking && <p role="status">Checking brief.</p>}
+      {validation?.validated && <p role="status">Brief passed validation.</p>}
+      {validation?.issues.map(({ location, message }, index) => <p role="alert" key={index}>{location}: {message}</p>)}
       {briefFields.map(([key, label]) => <Field key={key} label={label}>
-        <input required value={values[key]} onChange={(event) => setValues({ ...values, [key]: event.target.value })} />
+        <input required disabled={busy || checking} value={values[key]} onChange={(event) => {
+          setSaved(false);
+          if (validation?.validated) setValidation(null);
+          setValues({ ...values, [key]: event.target.value });
+        }} />
       </Field>)}
-      <Button primary type="submit" disabled={busy || saved || Boolean(brief && !revision)}>Save brief</Button>
+      <Button primary type="submit" disabled={busy || checking || saved || validation?.validated === false || Boolean(brief && !revision)}>Save brief</Button>
       {saved && <p role="status">Brief saved.</p>}
       {brief && !revision && <p role="alert">The current revision is unavailable. Reload the app before editing.</p>}
       {feedback}
@@ -46,18 +97,55 @@ function LiveNewRun({ data, client, run, href, action, canAct }) {
   const [briefId, setBriefId] = useState(run?.briefId ?? "");
   const briefs = data.briefs.filter(({ projectId }) => projectId === selected);
   const brief = briefs.find(({ id }) => id === briefId);
+  const revision = brief?.versions?.find(({ version }) => version === brief.currentVersion);
+  const agents = projects.find(({ id }) => id === selected)?.agents ?? [];
+  const [selectedAgent, setSelectedAgent] = useState("");
+  const agentKey = selectedAgent || agents[0]?.agentKey || "";
+  const [progress, setProgress] = useState(null);
+  const [progressError, setProgressError] = useState("");
+  const actionRef = useRef(action);
+  actionRef.current = action;
+  const { busy, submit, feedback } = useAction(async (name, payload) => {
+    const result = await action(name, payload);
+    if (result?.runId) setProgress(result.data.runs[0]);
+    return result;
+  });
+  const progressId = progress?.id;
+  const progressProject = progress?.projectId;
+  const progressStatus = progress?.status;
+  useEffect(() => {
+    if (!progressId || progressStatus !== "running") return;
+    let active = true;
+    let timer;
+    async function refresh() {
+      try {
+        const result = await actionRef.current("startRun", { projectId: progressProject, progressId });
+        if (!active) return;
+        const record = result?.data?.runs?.[0];
+        if (!record) throw new Error("Run progress is unavailable. Retrying.");
+        setProgress(record);
+        setProgressError("");
+        if (record.status !== "running") return;
+      } catch {
+        if (!active) return;
+        setProgressError("Could not refresh progress. Retrying.");
+      }
+      timer = setTimeout(refresh, 2000);
+    }
+    timer = setTimeout(refresh, 2000);
+    return () => { active = false; clearTimeout(timer); };
+  }, [progressId, progressProject, progressStatus]);
   return (
     <Page className="new-run-screen" title={run ? "Run brief" : "New run"}>
       <a href={href("runs")}>← Runs</a>
       {data.workflowLoadError && <p role="alert">{data.workflowLoadError}</p>}
       <Card title="Period brief">
-        <p>Excel upload and automatic run execution are unavailable on the connected backend.</p>
         {projects.length ? <Field label="Project">
-          <select value={selected} disabled={Boolean(run)} onChange={(event) => { setSelected(event.target.value); setBriefId(""); }}>
+          <select value={selected} disabled={Boolean(run || busy || progress)} onChange={(event) => { setSelected(event.target.value); setBriefId(""); }}>
             {projects.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
           </select>
         </Field> : <p>No projects are available for this brand.</p>}
-        {selected && !run && canAct("saveBrief") && <>
+        {selected && !run && !progress && canAct("saveBrief") && <>
           <Field label="Brief">
             <select value={briefId} onChange={(event) => setBriefId(event.target.value)}>
               <option value="">Create a brief</option>
@@ -65,12 +153,32 @@ function LiveNewRun({ data, client, run, href, action, canAct }) {
             </select>
           </Field>
           <LiveBrief key={selected + ":" + briefId + ":" + (brief?.currentVersion ?? 0)} brief={brief}
-            projectId={selected} action={async (name, payload) => {
+            projectId={selected} client={client} action={async (name, payload) => {
               const result = await action(name, payload);
               const savedBrief = result?.data?.briefs?.[0];
               if (savedBrief) setBriefId(savedBrief.id);
               return result;
             }} />
+          <Field label="Agent">
+            <select value={agentKey} disabled={busy} onChange={(event) => setSelectedAgent(event.target.value)}>
+              {!agents.length && <option value="">No enabled agent</option>}
+              {agents.map((agent) => <option key={agent.agentKey} value={agent.agentKey}>
+                {agent.name ?? agent.agentKey}
+              </option>)}
+            </select>
+          </Field>
+          <Button primary disabled={busy || !revision?.validated || !agentKey}
+            onClick={() => submit("startRun", {
+              projectId: selected, briefId: brief.id, briefVersion: revision.version, agentKey,
+            })}>Run agent</Button>
+          {!revision?.validated && <p>Upload and save a validated Excel brief to run the agent.</p>}
+          {feedback}
+        </>}
+        {progress && <>
+          <p role="status">Run {progress.id} · {progress.currentStageKey ?? "Starting"} · {progress.status.replace(/_/g, " ")}</p>
+          {progress.blocker?.reason && <p role="alert">{progress.blocker.reason}</p>}
+          {progressError && <p role="status">{progressError}</p>}
+          <a href={href("runs", { run: progress.id })}>Open run</a>
         </>}
         {selected && (run || !canAct("saveBrief")) && <p>{brief?.title ?? "Brief editing is unavailable for this view."}</p>}
       </Card>

@@ -1,17 +1,29 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Card, Field, Page, Table, Tabs, useAction } from "./AdminControls";
 import { rolesForClient } from "./access";
+import { createAuthServices } from "./authServices";
 import "./review-screens.css";
 import "./approvals.css";
 
 const gates = ["Outputs", "Plans and outlines"];
 const isPlan = (review) => review.gate === "gate_1";
+const authApiPath = import.meta.env.VITE_AUTH_API_PATH;
 
 export function LiveApprovals({ data }) {
   const [tab, setTab] = useState(gates[0]);
   const [brand, setBrand] = useState("");
+  const [latest, setLatest] = useState(null);
+  const [loadError, setLoadError] = useState("");
+  useEffect(() => {
+    if (!authApiPath) return;
+    let active = true;
+    createAuthServices(authApiPath).services.loadApprovals().then(({ reviewDecisions }) => {
+      if (active) setLatest(reviewDecisions);
+    }).catch((error) => { if (active) setLoadError(error.message); });
+    return () => { active = false; };
+  }, []);
   return <Page className="approvals-queue-screen" title="My approvals" description="Reviews assigned to you across your brands.">
-    {data.approvalsLoadError && <p role="alert">{data.approvalsLoadError}</p>}
+    {(loadError || (!latest && data.approvalsLoadError)) && <p role="alert">{loadError || data.approvalsLoadError}</p>}
     <Field label="Brand">
       <select value={brand} onChange={(event) => setBrand(event.target.value)}>
         <option value="">All brands</option>
@@ -21,18 +33,24 @@ export function LiveApprovals({ data }) {
     <Tabs values={gates} value={tab} onChange={setTab} />
     <Card><Table headers={["Brand", "Review", "Requested", ""]}
       empty="No pending reviews in this view."
-      rows={(data.reviewDecisions ?? []).filter((review) => isPlan(review) === (tab === gates[1]) &&
+      rows={(latest ?? data.reviewDecisions ?? []).filter((review) => isPlan(review) === (tab === gates[1]) &&
         (!brand || String(review.clientId) === brand)).map((review) => {
         const run = data.runs.find((item) => item.id === String(review.runId));
         const post = data.posts.find((item) => item.id === String(review.contentItemId));
         const query = new URLSearchParams({ client: review.clientId, run: review.runId });
         if (!isPlan(review)) query.set("post", review.contentItemId);
+        const reviewHref = "#" + (isPlan(review) ? "plan" : "post") + "?" + query;
+        const needsRefresh = !isPlan(review) && (!run || !post ||
+          !data.reviewDecisions?.some((entry) => entry._id === review._id));
         return { key: review._id, cells: [
           data.clients.find((item) => item.id === String(review.clientId))?.name ?? "Brand",
           (isPlan(review) ? run?.title : post?.title) ?? (isPlan(review) ? "Content plan" : "Output"),
           review.requestedAt ? new Date(review.requestedAt).toLocaleString() : "-",
-          run && (isPlan(review) || post) &&
-            <a className="btn" href={"#" + (isPlan(review) ? "plan" : "post") + "?" + query}>Review</a>,
+          (run || !isPlan(review)) && <a className="btn" href={reviewHref} onClick={needsRefresh ? (event) => {
+            event.preventDefault();
+            window.location.hash = reviewHref;
+            window.location.reload();
+          } : undefined}>Review</a>,
         ] };
       })} /></Card>
   </Page>;
@@ -76,10 +94,17 @@ export function LivePlan({ run, data, client, action, href }) {
   const [askApprover, setAskApprover] = useState(false);
   const { submit, busy, feedback } = useAction(action);
   const plan = run?.planRevisions?.at(-1);
-  const review = data.reviewDecisions?.find((entry) => isPlan(entry) && String(entry.runId) === run?.id &&
-    entry.planVersion === plan?.version);
-  const mayRequest = run?.currentStageKey === "gate_1" &&
-    rolesForClient(data.session, client?.id).some((role) => ["approver", "marketing_operator"].includes(role));
+  const roles = rolesForClient(data.session, client?.id);
+  const operator = roles.includes("marketing_operator");
+  const approver = roles.includes("approver");
+  const review = !client?.archived && data.reviewDecisions?.find((entry) => isPlan(entry) && entry.status === "pending" &&
+    String(entry.runId) === run?.id && entry.planVersion === plan?.version &&
+    (entry.reviewType === "owner" ? run?.isOwner === true && operator :
+      entry.reviewType === "requested_approver" && run?.isOwner === false && approver));
+  const mayRequest = run?.isOwner === true && run.currentStageKey === "gate_1" &&
+    (operator || approver) && !client?.archived &&
+    !run.reviewDecisions?.some((entry) => entry.planVersion === plan?.version &&
+      ["pending", "decided"].includes(entry.status));
   const ids = plan?.items?.map((item) => String(item.itemId)) ?? [];
   const selection = selected.filter((id) => ids.includes(id));
   return <Page className="plan-review-screen" title="Approve content plan" description={run?.title ?? "Gate 1"}>
@@ -98,9 +123,10 @@ export function LivePlan({ run, data, client, action, href }) {
           ] };
         })} />
       {mayRequest && !review && ids.length > 0 && !["awaiting_plan_approval", "Awaiting plan approval"].includes(run.status) && <>
-        <label><input type="checkbox" checked={askApprover} onChange={(event) => setAskApprover(event.target.checked)} /> Also ask the named approver</label>{" "}
+        <label><input type="checkbox" checked={askApprover || !operator} disabled={!operator}
+          onChange={(event) => setAskApprover(event.target.checked)} /> {operator ? "Also ask the named approver" : "Ask the named approver"}</label>{" "}
         <Button primary disabled={busy || !selection.length} onClick={() => submit("requestPlanApproval", {
-          runId: run.id, planVersion: plan.version, selectedPlanItemIds: selection, askApprover,
+          runId: run.id, planVersion: plan.version, selectedPlanItemIds: selection, askApprover: askApprover || !operator,
         })}>Request plan review</Button>
       </>}
     </Card>
@@ -108,19 +134,51 @@ export function LivePlan({ run, data, client, action, href }) {
   </Page>;
 }
 
-export function LivePost({ post, run, data, client, action, href }) {
+export function LivePost({ post, run, data, action, href }) {
   const [draft, setDraft] = useState(null);
+  const [destination, setDestination] = useState("");
+  const [schedule, setSchedule] = useState("");
+  const [sentReview, setSentReview] = useState(null);
   const { submit, busy, feedback } = useAction(action);
-  const review = data.reviewDecisions?.find((entry) => entry.gate === "gate_2" &&
+  const request = useAction(async () => {
+    const base = new URL(authApiPath, window.location.origin);
+    if (base.origin !== window.location.origin || base.pathname.startsWith("//") ||
+        base.search || base.hash || base.username || base.password)
+      throw new Error("The authentication API must use a same-origin path.");
+    const path = "/workflow/projects/" + encodeURIComponent(post.projectId) +
+      "/posts/" + encodeURIComponent(post.id) + "/gate-2-review";
+    const response = await fetch(base.pathname.replace(/\/$/, "") + path, {
+      method: "POST", credentials: "same-origin", redirect: "error", cache: "no-store",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({
+        draftVersionId: post.currentDraftVersionId, destination: selectedDestination,
+        scheduledAt: schedule ? new Date(schedule).toISOString() : null,
+      }),
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok || !result?.reviewDecision)
+      throw new Error(result?.message ?? "Could not request Gate 2 review. Refresh the draft and try again.");
+    setSentReview(result.reviewDecision);
+    return { message: "Gate 2 review sent to the named approver." };
+  });
+  const matchesDraft = (entry) => entry?.gate === "gate_2" &&
+    String(entry.draftVersionId) === String(post?.currentDraftVersionId);
+  const review = data.reviewDecisions?.find((entry) => entry.gate === "gate_2" && entry.status === "pending" &&
     String(entry.contentItemId) === post?.id && String(entry.draftVersionId) === String(post?.currentDraftVersionId));
-  const canEdit = post?.currentDraftVersionId && run &&
-    rolesForClient(data.session, client?.id).some((role) => ["approver", "marketing_operator"].includes(role)) &&
-    !["publishing", "published", "cancelled"].includes(String(post.status).toLowerCase());
+  const currentReview = review ?? (matchesDraft(sentReview) ? sentReview :
+    post?.reviewDecisions?.find((entry) => matchesDraft(entry) && ["pending", "decided"].includes(entry.status)));
+  const currentDraft = post?.draftVersions?.find((entry) =>
+    String(entry._id ?? entry.id) === String(post.currentDraftVersionId));
+  const qaPassed = Array.isArray(currentDraft?.qaChecks) && currentDraft.qaChecks.length > 0 &&
+    currentDraft.qaChecks.every((check) => check?.verdict === "PASS");
+  const destinations = post?.gate2Destinations ?? [];
+  const selectedDestination = destinations.includes(destination) ? destination : destinations[0] ?? "";
+  const canEdit = post?.currentDraftVersionId && run && post.canEditDraft === true;
   return <Page className="post-review-screen" title={post?.title ?? "Approve output"} description={post ? "Gate 2 · " + (post.status ?? "Draft") : "Select an output to review."}>
     {href("approvals") && <a href={href("approvals")}>My approvals</a>}
     {feedback}
     <Card title={post?.version != null ? "Preview · Version " + post.version : "Preview"}>
-      {draft ? <form className="admin-form" onSubmit={(event) => {
+      {draft && canEdit ? <form className="admin-form" onSubmit={(event) => {
         event.preventDefault();
         submit("savePostDraft", { runId: run.id, postId: post.id, currentDraftVersionId: draft.id, text: draft.text }, () => setDraft(null));
       }}>
@@ -129,10 +187,33 @@ export function LivePost({ post, run, data, client, action, href }) {
         <Button onClick={() => setDraft(null)} disabled={busy}>Cancel</Button>
       </form> : <>
         <p style={{ whiteSpace: "pre-wrap" }}>{post?.copy ?? "No draft text is available."}</p>
-        {canEdit && <Button onClick={() => setDraft({ id: post.currentDraftVersionId, text: post.copy ?? "" })}>Edit draft</Button>}
+        {canEdit && <Button disabled={request.busy} onClick={() => setDraft({ id: post.currentDraftVersionId, text: post.copy ?? "" })}>Edit draft</Button>}
       </>}
     </Card>
-    {review && <Decision key={review._id} review={review} action={action} />}
-    <p className="muted">Creating new output reviews and scheduling, publishing, or verifying on LinkedIn are unavailable.</p>
+    {currentReview && <Card title="Gate 2 request">
+      <p>Draft version {post.version} · {currentReview.status === "pending" ? "Awaiting approval" : currentReview.decision?.replace(/_/g, " ")}</p>
+      <p>Destination {currentReview.destination}</p>
+      <p>{currentReview.scheduledAt ? "Scheduled for " + new Date(currentReview.scheduledAt).toLocaleString() : "Unscheduled"}</p>
+    </Card>}
+    {canEdit && !draft && !currentReview && qaPassed && !["approved", "failed", "completed", "cancelled"].includes(
+      String(post.status).toLowerCase(),
+    ) && <Card title="Request Gate 2 review">
+      <form className="admin-form" onSubmit={(event) => {
+        event.preventDefault();
+        if (selectedDestination && !request.busy) request.submit("requestGate2Review");
+      }}>
+        <Field label="Destination"><select required value={selectedDestination} disabled={request.busy}
+          onChange={(event) => setDestination(event.target.value)}>
+          {!destinations.length && <option value="">No available destination</option>}
+          {destinations.map((value) => <option key={value} value={value}>{value === "linkedin" ? "LinkedIn" : value}</option>)}
+        </select></Field>
+        <Field label="Schedule (optional, local time)"><input type="datetime-local" value={schedule}
+          disabled={request.busy} onChange={(event) => setSchedule(event.target.value)} /></Field>
+        <Button primary type="submit" disabled={request.busy || !selectedDestination}>Request Gate 2 review</Button>
+      </form>
+    </Card>}
+    {request.feedback}
+    {review && post.mayDecideGate2 && <Decision key={review._id} review={review} action={action} />}
+    <p className="muted">Publishing and verification on LinkedIn are unavailable.</p>
   </Page>;
 }

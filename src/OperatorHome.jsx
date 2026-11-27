@@ -22,12 +22,14 @@ export function configuredAgent(data, agentId) {
 export function canStartRun(report) {
   if (
     !report ||
+    report.verdict === "BLOCKED" ||
     report.blocked ||
     report.canStart === false ||
     report.gates?.some((gate) => gate.passed === false)
   )
     return false;
   return (
+    ["READY", "LIMITED"].includes(report.verdict) ||
     report.canStart === true ||
     (["Green", "Amber"].includes(report.band) &&
       Boolean(report.gates?.length) &&
@@ -205,10 +207,8 @@ function BrandSetupHome({ client, data, agent, readiness, team, href }) {
         <div className="brand-home-stack">
           <Card title="Knowledge">
             <div className="brand-home-score">
-              {readiness?.score != null && <strong>{readiness.score}<small> / 100</small></strong>}
-              <Chip>{readiness?.band ?? (readyToPublish ? "Ready to publish" : "Not ready")}</Chip>
+              <Chip>{readiness?.verdict ?? readiness?.band ?? (readyToPublish ? "Ready to publish" : "Not ready")}</Chip>
             </div>
-            {readiness?.score != null && <progress aria-label="Knowledge readiness" value={readiness.score} max={100} />}
             {readiness?.reason && <p>{readiness.reason}</p>}
             {knowledge && <a href={knowledge}>See what’s missing</a>}
           </Card>
@@ -235,6 +235,9 @@ export function OperatorHome({ data, client, href, showSetup = false }) {
   const [query, setQuery] = useState("");
   const scope = (items) => client ? items.filter((item) => item.clientId === client.id) : [];
   const readiness = scope(data.readiness)[0];
+  const agentNames = new Map(scope(data.projects ?? []).flatMap(({ agents = [] }) =>
+    agents.map(({ agentKey, name }) => [agentKey, name])));
+  const agentReadiness = Object.entries(readiness?.perAgent ?? {});
   const agent = configuredAgent(data, client?.agentId);
   const canRun = client && canStartRun(readiness);
   const newRun = href("new-run");
@@ -249,7 +252,8 @@ export function OperatorHome({ data, client, href, showSetup = false }) {
   const team = client ? data.users.filter((user) => user.assignments?.[client.id]?.length || user.clientAssignments?.some(
     ({ clientId }) => String(clientId) === String(client.id),
   )) : [];
-  const readinessLabel = readiness?.blocked ? "Blocked" : readiness?.band ?? (readiness?.canStart ? "Ready" : "Not assessed");
+  const readinessLabel = readiness?.verdict ??
+    (readiness?.blocked ? "Blocked" : readiness?.band ?? (readiness?.canStart ? "Ready" : "Not assessed"));
   const start = (label) => newRun && (data.liveAccess || canRun || needsFirstRunSetup(client, readiness)
     ? <WorkflowLink href={newRun} primary>{label}</WorkflowLink>
     : <Button primary disabled>{label}</Button>);
@@ -279,8 +283,15 @@ export function OperatorHome({ data, client, href, showSetup = false }) {
         <div className="brand-home-agents">
           <Card title={agent?.name ?? "Agent workflows"}>
             {agent?.description && <p>{agent.description}</p>}
-            <div><Chip>{readinessLabel}</Chip></div>
-            {readiness?.reason && <p>{readiness.reason}</p>}
+            {agentReadiness.length ? agentReadiness.map(([key, report]) => (
+              <div key={key}>
+                {agentNames.get(key) ?? key} <Chip>{report.verdict}</Chip>
+                {report.reason && <p>{report.reason}</p>}
+              </div>
+            )) : <>
+              <div><Chip>{readinessLabel}</Chip></div>
+              {readiness?.reason && <p>{readiness.reason}</p>}
+            </>}
             {readiness?.preview && !canRun && !readiness.reason && (
               <p>{readiness.canPublish ? "Publish knowledge to start a run." : "Approve the five knowledge files to continue."}</p>
             )}
@@ -337,8 +348,7 @@ export function OperatorHome({ data, client, href, showSetup = false }) {
         </div>
         <div className="brand-home-stack">
           <Card title="Knowledge">
-            <div className="brand-home-score">{readiness?.score != null && <strong>{readiness.score}<small> / 100 </small></strong>}<Chip>{readinessLabel}</Chip></div>
-            {readiness?.score != null && <progress aria-label="Knowledge readiness" value={readiness.score} max={100} />}
+            <div className="brand-home-score"><Chip>{readinessLabel}</Chip></div>
             {href("knowledge") && <a href={href("knowledge")}>View knowledge</a>}
           </Card>
           <Card title="Team">
