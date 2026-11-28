@@ -4,7 +4,7 @@ export const runTones = { Completed: "g", Failed: "r", Blocked: "r", "Awaiting G
 export const statusLabels = {
   running: "Agents working", awaiting_plan_approval: "Awaiting plan approval", awaiting_post_approval: "Awaiting post approval",
   writing: "Writing posts", blocked: "Blocked", failed: "Failed", cancelled: "Cancelled", completed: "Completed", draft: "Draft",
-  scheduled: "Scheduled", approved: "Approved", published: "Published",
+  scheduled: "Scheduled", plan_ready: "Plan ready", approved: "Approved", published: "Published",
 };
 export const stageLabels = {
   "context-assembler": "Assembling context", "brief-qualifier": "Qualifying brief", "content-planner": "Planning content",

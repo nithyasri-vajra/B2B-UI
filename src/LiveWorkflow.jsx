@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Button, Card, Field, Page, Table, Tabs, useAction } from "./AdminControls";
+import { Button, Card, Chip, Field, Page, Table, Tabs, useAction } from "./AdminControls";
 import { rolesForClient } from "./access";
 import { createAuthServices } from "./authServices";
+import { statusText } from "./labels";
 import "./review-screens.css";
 import "./approvals.css";
 
@@ -183,11 +184,23 @@ export function LivePlan({ run, data, client, action, href }) {
       ["pending", "decided"].includes(entry.status));
   const ids = plan?.items?.map((item) => String(item.itemId)) ?? [];
   const selection = selected.filter((id) => ids.includes(id));
-  return <Page className="plan-review-screen" title="Approve content plan" description={run?.title ?? "Gate 1"}>
-    {run && <a href={href("runs", { run: run.id })}>Back to run</a>}
+  const items = plan?.items ?? [];
+  const pillars = Object.entries(items.reduce((counts, { pillar }) => pillar ? { ...counts, [pillar]: (counts[pillar] ?? 0) + 1 } : counts, {}))
+    .map(([name, count]) => name + " " + count).join(" · ");
+  const plannerReport = run?.planningResult?.planner?.report;
+  return <Page className="plan-review-screen" title="Approve content plan"
+    description={[run?.title, "Gate 1", plan && "Version " + plan.version, items.length + " posts planned"].filter(Boolean).join(" · ")}>
+    {run && <p className="our-crumbs"><a href={href("runs", { run: run.id })}>{run.title ?? "Back to run"}</a></p>}
     {feedback}
-    <Card title={plan ? "Plan version " + plan.version : "Content plan"}>
-      <Table headers={["Selected", "Topic", "Pillar", "Call to action"]} empty="No plan items are available."
+    <div className="our-g4">
+      <div className="card"><p className="muted">Posts</p><p className="our-kpi">{items.length}</p></div>
+      <div className="card"><p className="muted">Pillar mix</p><p className="our-strong">{pillars || "—"}</p></div>
+      <div className="card"><p className="muted">Planner verdict</p><p className="our-strong">{run?.planningResult?.planner?.verdict ?? "—"}</p></div>
+      <div className="card"><p className="muted">Review</p><p className="our-strong">{review ? "Waiting for your decision" : statusText(run?.status) ?? "—"}</p></div>
+    </div>
+    <Card title={plan ? "Calendar · version " + plan.version : "Content plan"}>
+      {mayRequest && !review && <p className="muted">Tick the posts to keep, then request the plan review.</p>}
+      <Table headers={["Keep", "Pillar", "Topic and angle", "Call to action"]} empty="No plan items are available."
         rows={(plan?.items ?? []).map((item) => {
           const id = String(item.itemId);
           const checked = (review ? review.selectedPlanItemIds?.map(String) ?? [] : selection).includes(id);
@@ -195,7 +208,9 @@ export function LivePlan({ run, data, client, action, href }) {
             <input type="checkbox" aria-label={"Select " + (item.title ?? item.topic ?? "plan item")} checked={checked}
               disabled={!mayRequest || Boolean(review)} onChange={() => setSelected((current) =>
                 checked ? current.filter((entry) => entry !== id) : [...current, id])} />,
-            item.title ?? item.topic ?? item.angle ?? id, item.pillar ?? "-", item.callToAction ?? "-",
+            item.pillar ?? "-",
+            <><p className="our-strong">{item.title ?? item.topic ?? id}</p>{item.angle && <p className="muted">{item.angle}</p>}</>,
+            item.callToAction ?? "-",
           ] };
         })} />
       {mayRequest && !review && ids.length > 0 && !["awaiting_plan_approval", "Awaiting plan approval"].includes(run.status) && <>
@@ -206,8 +221,11 @@ export function LivePlan({ run, data, client, action, href }) {
       </>}
     </Card>
     {review && <Decision key={review._id} review={review} action={action} />}
+    {plannerReport && <Card title="Why the planner chose this"><p style={{ whiteSpace: "pre-wrap" }}>{plannerReport}</p></Card>}
   </Page>;
 }
+
+const reviewDate = new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
 
 export function LivePost({ post, run, data, action, href }) {
   const [draft, setDraft] = useState(null);
@@ -260,9 +278,19 @@ export function LivePost({ post, run, data, action, href }) {
   const destinations = post?.gate2Destinations ?? [];
   const selectedDestination = destinations.includes(destination) ? destination : destinations[0] ?? "";
   const canEdit = post?.currentDraftVersionId && run && post.canEditDraft === true;
-  return <Page className="post-review-screen" title={post?.title ?? "Approve output"} description={post ? "Gate 2 · " + (post.status ?? "Draft") : "Select an output to review."}>
-    {href("approvals") && <a href={href("approvals")}>My approvals</a>}
+  const qa = currentDraft?.qaChecks?.at(-1);
+  const claims = currentDraft?.claims ?? [];
+  const words = String(post?.copy ?? "").split(/\s+/).filter(Boolean).length;
+  const scheduledFor = post?.scheduledAt && Number.isFinite(Date.parse(post.scheduledAt)) ? reviewDate.format(new Date(post.scheduledAt)) : null;
+  return <Page className="post-review-screen" title={post?.title ?? "Approve output"}
+    description={post ? ["Gate 2", post.displayStatus ?? post.status ?? "Draft", post.version != null && "Version " + post.version].filter(Boolean).join(" · ") : "Select an output to review."}>
+    <p className="our-crumbs">{href("approvals") && <a href={href("approvals")}>My approvals</a>}
+      {run && href("runs") && <> · <a href={href("runs", { run: run.id })}>{run.title ?? "Back to run"}</a></>}</p>
     {feedback}
+    {regenerating && <div className="our-alert info" role="status">The writer is regenerating this post with your feedback. This page refreshes by itself.</div>}
+    {post?.displayStatus === "Scheduled" && <div className="our-alert ok">Approved{post.approvedBy ? " by " + post.approvedBy : ""}. Publishes {scheduledFor}{post.destination ? " to " + (post.destination === "linkedin" ? "LinkedIn" : post.destination) : ""}.</div>}
+    {String(qa?.verdict).toUpperCase() === "BLOCKED" && <div className="our-alert bad">Quality check blocked this version: {qa.report}</div>}
+    <div className="our-g2">
     <Card title={post?.version != null ? "Preview · Version " + post.version : "Preview"}>
       {draft && canEdit ? <form className="admin-form" onSubmit={(event) => {
         event.preventDefault();
@@ -272,16 +300,31 @@ export function LivePost({ post, run, data, action, href }) {
         <Button primary type="submit" disabled={busy}>Save draft revision</Button>{" "}
         <Button onClick={() => setDraft(null)} disabled={busy}>Cancel</Button>
       </form> : <>
-        <p style={{ whiteSpace: "pre-wrap" }}>{post?.copy ?? "No draft text is available."}</p>
-        {currentDraft?.qaFixRounds > 0 && <p className="muted">Quality check asked for changes, so the writer
-          rewrote this draft automatically {currentDraft.qaFixRounds === 1 ? "once" : currentDraft.qaFixRounds + " times"} before review.</p>}
-        {canEdit && <Button disabled={request.busy} onClick={() => setDraft({ id: post.currentDraftVersionId, text: post.copy ?? "" })}>Edit draft</Button>}
+        <div className="our-post-preview">
+          <p className="muted">LinkedIn{scheduledFor ? " · " + scheduledFor : ""}</p>
+          <p style={{ whiteSpace: "pre-wrap" }}>{post?.copy ?? "No draft text is available."}</p>
+        </div>
+        {post?.copy && <p className="muted">{words} words</p>}
+        {canEdit && <div><Button disabled={request.busy} onClick={() => setDraft({ id: post.currentDraftVersionId, text: post.copy ?? "" })}>Edit text</Button></div>}
       </>}
     </Card>
+    <Card title="Quality check">
+      {qa ? <>
+        <div className="our-row"><Chip tone={{ PASS: "ok", READY: "ok", LIMITED: "warn", REVISE: "warn", BLOCKED: "bad", FAIL: "bad" }[String(qa.verdict).toUpperCase()]}>{qa.verdict}</Chip>
+          {currentDraft?.qaFixRounds > 0 && <span className="muted">after {currentDraft.qaFixRounds} automatic rewrite{currentDraft.qaFixRounds === 1 ? "" : "s"}</span>}</div>
+        {qa.report && <details><summary>Full quality report</summary><p style={{ whiteSpace: "pre-wrap" }}>{qa.report}</p></details>}
+      </> : <p className="muted">Quality check has not reviewed this version yet.</p>}
+      <h3>Claims · {claims.length}</h3>
+      {claims.length ? claims.map((claim, index) => (
+        <div key={index} className="our-between our-top"><span>“{claim.quote}”</span>
+          <Chip tone={claim.recordId ? "ok" : "bad"}>{claim.recordId ? "Evidence linked" : "No evidence"}</Chip></div>
+      )) : <p className="muted">No factual claims in this version.</p>}
+    </Card>
+    </div>
     {currentReview && <Card title="Gate 2 request">
       <p>Draft version {post.version} · {currentReview.status === "pending" ? "Awaiting approval" : currentReview.decision?.replace(/_/g, " ")}</p>
-      <p>Destination {currentReview.destination}</p>
-      <p>{currentReview.scheduledAt ? "Scheduled for " + new Date(currentReview.scheduledAt).toLocaleString() : "Unscheduled"}</p>
+      {currentReview.destination && <p>Destination {currentReview.destination === "linkedin" ? "LinkedIn" : currentReview.destination}</p>}
+      <p>{currentReview.scheduledAt ? "Scheduled for " + reviewDate.format(new Date(currentReview.scheduledAt)) : "No publishing time set yet"}</p>
     </Card>}
     {canEdit && !draft && !currentReview && qaPassed && !["approved", "failed", "completed", "cancelled"].includes(
       String(post.status).toLowerCase(),
