@@ -160,6 +160,10 @@ export function B2BAgents({
       requestPlanApproval: Boolean(actionRun && scopedRole.some((role) => ["approver", "marketing_operator"].includes(role))),
       savePostDraft: Boolean(actionRun && data.posts.some((item) => item.id === payload.postId && item.runId === actionRun.id) &&
         scopedRole.some((role) => ["approver", "marketing_operator"].includes(role))),
+      regeneratePost: Boolean(actionRun && data.posts.some((item) => item.id === payload.postId && item.runId === actionRun.id) &&
+        scopedRole.some((role) => ["approver", "marketing_operator"].includes(role))),
+      refreshApprovals: true,
+      loadPostDetail: Boolean(data.posts.some((item) => item.id === payload.postId)),
       cancelRun: Boolean(actionRun && (platformAdmin || scopedRole.some((role) => ["approver", "marketing_operator"].includes(role)))),
     };
     if (requireSignIn && (
@@ -174,7 +178,7 @@ export function B2BAgents({
       : !requireSignIn || platformAdmin ? payload.clientId ?? targetClient : targetClient;
     const result = await store.dispatch(name, { ...payload, clientId: scopedClient,
       projectId: actionRun?.projectId ?? payload.projectId });
-    if (data.liveAccess && ["decideReview", "cancelRun", "requestPlanApproval", "savePostDraft"].includes(name)) {
+    if (data.liveAccess && ["decideReview", "cancelRun", "requestPlanApproval", "savePostDraft", "regeneratePost"].includes(name)) {
       await store.dispatch("refreshApprovals");
       if (name === "decideReview") {
         const request = assignedReview.contentItemId

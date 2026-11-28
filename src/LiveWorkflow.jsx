@@ -89,6 +89,64 @@ function Decision({ review, action }) {
   </Card>;
 }
 
+// Post review (Gate 2): no approve/reject. The reviewer either describes what should
+// change and regenerates the post, or marks the current version as final.
+function PostFeedback({ post, run, review, mayFinalize, canRegenerate, action }) {
+  const [text, setText] = useState("");
+  const [stepUp, setStepUp] = useState(false);
+  const regenerate = useAction(action);
+  const finalize = useAction(async (name, values) => {
+    try {
+      return await action(name, values);
+    } catch (error) {
+      if (error.code === "reauthentication_required") {
+        setStepUp(true);
+        throw new Error("Confirm your Google sign-in, then reopen the post and mark it as final.");
+      }
+      throw error;
+    }
+  });
+  const running = post.regeneration?.status === "running";
+  const history = (post.draftVersions ?? []).filter((entry) => entry.reviewerFeedback)
+    .sort((a, b) => b.version - a.version);
+  return <Card title="Feedback">
+    {running ? <p role="status">Regenerating the post with your feedback. The new version appears here when it is ready.</p> : <>
+      {post.regeneration?.status === "failed" && <p role="alert">The last regeneration did not finish: {post.regeneration.failureReason ?? "try again."}</p>}
+      {post.regeneration?.qaNote && post.regeneration.status === "completed" && !review &&
+        <p className="muted">Quality check note on the new version: {post.regeneration.qaNote}</p>}
+      {canRegenerate && <form className="admin-form" onSubmit={(event) => {
+        event.preventDefault();
+        regenerate.submit("regeneratePost", {
+          runId: run.id, postId: post.id, currentDraftVersionId: post.currentDraftVersionId, feedback: text.trim(),
+        }, () => setText(""));
+      }}>
+        <Field label="What should change?">
+          <textarea required maxLength={4000} rows={5} value={text} disabled={regenerate.busy}
+            placeholder="For example: make the opening line about the client's problem, cut the last paragraph and end with a question."
+            onChange={(event) => setText(event.target.value)} />
+        </Field>
+        <Button primary type="submit" disabled={regenerate.busy || !text.trim()}>
+          {regenerate.busy ? "Sending…" : "Regenerate"}
+        </Button>
+      </form>}
+      {regenerate.feedback}
+      {review && mayFinalize && <div className="admin-actions" style={{ marginTop: 16 }}>
+        {stepUp ? <Button onClick={() => finalize.submit("signIn", { reauthenticate: true })} disabled={finalize.busy}>Confirm Google sign-in</Button> :
+          <Button disabled={finalize.busy} onClick={() => finalize.submit("decideReview", {
+            reviewId: review._id, projectId: String(review.projectId), decision: "approved", reason: "",
+          })}>Mark as final</Button>}
+        {finalize.feedback}
+      </div>}
+    </>}
+    {history.length > 0 && <>
+      <h3>Earlier feedback</h3>
+      <ul>{history.map((entry) => <li key={String(entry._id ?? entry.id)}>
+        Version {entry.version - 1} → {entry.version}: {entry.reviewerFeedback}
+      </li>)}</ul>
+    </>}
+  </Card>;
+}
+
 export function LivePlan({ run, data, client, action, href }) {
   const [selected, setSelected] = useState([]);
   const [askApprover, setAskApprover] = useState(false);
@@ -136,6 +194,17 @@ export function LivePlan({ run, data, client, action, href }) {
 
 export function LivePost({ post, run, data, action, href }) {
   const [draft, setDraft] = useState(null);
+  const regenerating = post?.regeneration?.status === "running";
+  // While a regeneration runs in the background, refresh the post every 10 seconds.
+  useEffect(() => {
+    if (!regenerating || !post?.projectId) return;
+    const timer = setInterval(() => {
+      action("loadPostDetail", { projectId: post.projectId, postId: post.id })
+        .then(() => action("refreshApprovals").catch(() => {}))
+        .catch(() => {});
+    }, 10_000);
+    return () => clearInterval(timer);
+  }, [regenerating, post?.projectId, post?.id, action]);
   const [destination, setDestination] = useState("");
   const [schedule, setSchedule] = useState("");
   const [sentReview, setSentReview] = useState(null);
@@ -213,7 +282,10 @@ export function LivePost({ post, run, data, action, href }) {
       </form>
     </Card>}
     {request.feedback}
-    {review && post.mayDecideGate2 && <Decision key={review._id} review={review} action={action} />}
+    {post && run && (canEdit || (review && post.mayDecideGate2)) &&
+      !["approved", "publishing", "published", "cancelled"].includes(String(post.status).toLowerCase()) &&
+      <PostFeedback key={String(post.currentDraftVersionId)} post={post} run={run} review={review}
+        mayFinalize={post.mayDecideGate2 === true} canRegenerate={canEdit && !draft} action={action} />}
     <p className="muted">Publishing and verification on LinkedIn are unavailable.</p>
   </Page>;
 }

@@ -292,6 +292,12 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
       await call(projectPath(projectId) + "/posts/" + pathId(postId) + "/drafts", { currentDraftVersionId, text });
       return services.loadPostDetail({ projectId, postId });
     },
+    // Reviewer feedback in plain language: the backend regenerates the post in the background.
+    async regeneratePost({ projectId, postId, currentDraftVersionId, feedback }) {
+      await call(projectPath(projectId) + "/posts/" + pathId(postId) + "/regenerate", { currentDraftVersionId, feedback });
+      const detail = await services.loadPostDetail({ projectId, postId });
+      return { ...detail, message: "Regenerating the post with your feedback. This usually takes a few minutes." };
+    },
     async loadKnowledgeVersions({ projectId }) {
       const { knowledgeVersions } = await call("/workflow/projects/" + pathId(projectId) + "/knowledge");
       return knowledgeVersions;
