@@ -1,63 +1,137 @@
 import { useState } from "react";
-import { Button, Card, Field, Page, Table, useAction } from "./AdminControls";
+import { Button, Card, Chip, Field, Page, useAction } from "./AdminControls";
+import { KnowledgeTabs, OurDialog } from "./OurUi";
 import { isPlatformAdmin } from "./access";
 import { knowledgeFileTypes } from "./authServices";
 
 const sourceAreas = (fields) => fields.get("areas").split(",").map((area) => area.trim()).filter(Boolean);
 
+const processingTone = (status) => /processed|ready|complete/i.test(status ?? "") ? "g" : /fail|error/i.test(status ?? "") ? "r" : "a";
+const recordTone = (state) => /approved/i.test(state ?? "") ? "g" : /disputed|expired|rejected/i.test(state ?? "") ? "r" : "a";
+const knowledgeDate = new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric" });
+const showDate = (value) => value && Number.isFinite(Date.parse(value)) ? knowledgeDate.format(new Date(value)) : "—";
+
+// Our Sources screen: the list first, adding a link or file in a dialog. Same actions as before.
 export function LiveSources({ data, client, action, link, readOnly }) {
   const { submit, busy, feedback } = useAction(action);
+  const [adding, setAdding] = useState(null);
   const sources = data.uploads.filter((row) => row.clientId === client?.id);
   const canAddSource = client && (!readOnly || isPlatformAdmin(data.session));
-  return <Page className="knowledge-readiness" title="Knowledge" description={client?.name}>
-    <nav className="knowledge-readiness-tabs" aria-label="Knowledge sections">
-      <a {...link("Readiness.dc.html")}>Overview</a>
-      <span aria-current="page">Sources</span>
-      <a {...link("RecordReview.dc.html")}>Records</a>
-    </nav>
+  const done = () => setAdding(null);
+  return <Page className="knowledge-readiness" title="Knowledge"
+    description={client ? "Sources for " + client.name + ". Records are drawn from these and approved before they are published." : undefined}
+    actions={canAddSource && <>
+      <Button onClick={() => setAdding("link")}>Add link</Button>
+      {!client.archived && <Button primary onClick={() => setAdding("file")}>Upload file</Button>}
+    </>}>
+    <KnowledgeTabs link={link} current="Sources" />
     {data.brandKnowledgeLoadError && <p role="alert">Some knowledge data could not be loaded. Reload to retry.</p>}
     {feedback}
-    {canAddSource && <Card title="Add a link">
-      <form className="admin-form" onSubmit={(event) => {
+    <section className="card our-flush">
+      <div className="admin-table"><table>
+        <thead><tr><th>Source</th><th>Areas</th><th>Type</th><th>Added</th><th>Processing</th></tr></thead>
+        <tbody>
+          {sources.map((row) => <tr key={row.id}>
+            <td><p className="our-strong">{row.name}</p>{row.url && <p className="muted">{row.url}</p>}</td>
+            <td>{row.domain || "—"}</td>
+            <td>{row.sourceType === "link" ? "Link" : row.sourceType === "file" ? "File" : row.sourceType ?? "—"}</td>
+            <td>{showDate(row.createdAt)}</td>
+            <td><Chip tone={processingTone(row.status)}>{row.status ?? "Unknown"}</Chip></td>
+          </tr>)}
+          {!sources.length && <tr><td colSpan={5} className="muted">No sources yet. Add a link or upload a file to start.</td></tr>}
+        </tbody>
+      </table></div>
+    </section>
+    {canAddSource && <p className="muted">Files can be up to 2 MiB: {knowledgeFileTypes.join(", ")}.</p>}
+    {adding === "link" && <OurDialog title="Add a link" onClose={done}>
+      <form className="our-stack" onSubmit={(event) => {
         event.preventDefault();
-        const form = event.currentTarget;
-        const fields = new FormData(form);
-        const areas = sourceAreas(fields);
-        submit("addKnowledgeSource", { title: fields.get("title"), url: fields.get("url"), areas }, () => form.reset());
+        const fields = new FormData(event.currentTarget);
+        submit("addKnowledgeSource", { title: fields.get("title"), url: fields.get("url"), areas: sourceAreas(fields) }, done);
       }}>
-        <Field label="Title"><input name="title" required /></Field>
-        <Field label="Source URL"><input name="url" type="url" required /></Field>
-        <Field label="Knowledge areas (comma separated)"><input name="areas" required /></Field>
-        <Button primary type="submit" disabled={busy}>Add link</Button>
+        <label>Title<input name="title" required /></label>
+        <label>Source URL<input name="url" type="url" required /></label>
+        <label>Knowledge areas (comma separated)<input name="areas" required placeholder="voice, company, audience" /></label>
+        <div><Button primary type="submit" disabled={busy}>{busy ? "Adding…" : "Add link"}</Button></div>
       </form>
-    </Card>}
-    {canAddSource && !client.archived && <Card title="File upload">
-      <form className="admin-form" onSubmit={(event) => {
+    </OurDialog>}
+    {adding === "file" && <OurDialog title="Upload a knowledge file" onClose={done}>
+      <form className="our-stack" onSubmit={(event) => {
         event.preventDefault();
         if (busy) return;
-        const form = event.currentTarget;
-        const fields = new FormData(form);
-        submit("addKnowledgeSource", { file: fields.get("file"), areas: [...new Set(sourceAreas(fields))] },
-          () => form.reset());
+        const fields = new FormData(event.currentTarget);
+        submit("addKnowledgeSource", { file: fields.get("file"), areas: [...new Set(sourceAreas(fields))] }, done);
       }}>
-        <Field label="Knowledge file (up to 2 MiB)">
-          <input name="file" type="file" accept={knowledgeFileTypes.join(",")} required />
-        </Field>
-        <Field label="Knowledge areas (comma separated)"><input name="areas" required /></Field>
-        <Button primary type="submit" disabled={busy}>Upload file</Button>
+        <label>File (up to 2 MiB)<input name="file" type="file" accept={knowledgeFileTypes.join(",")} required /></label>
+        <label>Knowledge areas (comma separated)<input name="areas" required placeholder="voice, company, audience" /></label>
+        <div><Button primary type="submit" disabled={busy}>{busy ? "Uploading…" : "Upload file"}</Button></div>
       </form>
-    </Card>}
-    <Card title="Sources"><Table headers={["Source", "Areas", "Type", "Processing"]}
-      empty="No knowledge sources registered."
-      rows={sources.map((row) => ({ key: row.id, cells: [row.name, row.domain, row.sourceType, row.status ?? "Unknown"] }))} /></Card>
+    </OurDialog>}
   </Page>;
 }
 
-export function NewKnowledgeRecord({ sources, action }) {
+// Our Records screen: filters above the table, record detail and adding a record in dialogs. Same actions as before.
+export function LiveRecords({ data, client, action, link, readOnly }) {
+  const [query, setQuery] = useState("");
+  const [area, setArea] = useState("");
+  const [state, setState] = useState("");
+  const [openId, setOpenId] = useState(null);
+  const [adding, setAdding] = useState(false);
+  const records = client ? data.records.filter((item) => item.clientId === client.id) : [];
+  const areas = [...new Set(records.map((record) => record.domain).filter(Boolean))].sort();
+  const states = [...new Set(records.map((record) => record.state).filter(Boolean))].sort();
+  const visible = records.filter((record) => (!area || record.domain === area) && (!state || record.state === state) &&
+    [record.item, record.type, record.domain].some((value) => String(value ?? "").toLowerCase().includes(query.trim().toLowerCase())));
+  const record = records.find(({ id }) => id === openId);
+  const sources = client ? data.uploads.filter((row) => row.clientId === client.id) : [];
+  return <Page className="knowledge-readiness" title="Knowledge"
+    description={client ? "Records for " + client.name + ". Only approved records are published to the agents." : "Select a brand to review knowledge records."}
+    actions={!readOnly && client && <Button primary onClick={() => setAdding(true)}>Add record</Button>}>
+    <KnowledgeTabs link={link} current="Records" showSources={!readOnly || isPlatformAdmin(data.session)} />
+    {data.brandKnowledgeLoadError && <p role="alert">Some knowledge data could not be loaded. Reload to retry.</p>}
+    <section className="card our-flush">
+      <div className="our-toolbar">
+        <input type="search" aria-label="Search records" placeholder="Search records" value={query} onChange={(event) => setQuery(event.target.value)} />
+        <select aria-label="Area" value={area} onChange={(event) => setArea(event.target.value)}>
+          <option value="">All areas</option>{areas.map((value) => <option key={value}>{value}</option>)}
+        </select>
+        <select aria-label="Status" value={state} onChange={(event) => setState(event.target.value)}>
+          <option value="">Any status</option>{states.map((value) => <option key={value}>{value}</option>)}
+        </select>
+        <span className="muted">{visible.length} of {records.length}</span>
+      </div>
+      <div className="admin-table"><table>
+        <thead><tr><th>Record</th><th>Area</th><th>Type</th><th>Status</th><th>Evidence</th><th>Review by</th><th /></tr></thead>
+        <tbody>
+          {visible.map((row) => <tr key={row.id}>
+            <td>{row.item}</td>
+            <td>{row.domain}</td>
+            <td>{row.type ?? "—"}</td>
+            <td><Chip tone={recordTone(row.state)}>{row.state ?? "—"}</Chip></td>
+            <td>{row.grade ? "Grade " + row.grade : "—"}{row.reuse && <p className="muted">{row.reuse}</p>}</td>
+            <td>{showDate(row.reviewBy)}</td>
+            <td className="our-right"><Button onClick={() => setOpenId(row.id)}>{readOnly ? "View" : "Open"}</Button></td>
+          </tr>)}
+          {!visible.length && <tr><td colSpan={7} className="muted">{records.length ? "No records match these filters." : "No records yet."}</td></tr>}
+        </tbody>
+      </table></div>
+    </section>
+    {record && <OurDialog title={"Record · revision " + (record.version ?? "—")} onClose={() => setOpenId(null)}>
+      <div className="our-row"><Chip tone={recordTone(record.state)}>{record.state}</Chip><span className="muted">{[record.domain, record.type].filter(Boolean).join(" · ")}</span></div>
+      {readOnly ? <p>{record.item}</p> : <ReviseKnowledgeRecord key={record.id + ":" + record.currentRevision} record={record} action={action} />}
+    </OurDialog>}
+    {adding && <OurDialog title="Add a record" onClose={() => setAdding(false)}>
+      <NewKnowledgeRecord sources={sources} action={action} bare onDone={() => setAdding(false)} />
+    </OurDialog>}
+  </Page>;
+}
+
+export function NewKnowledgeRecord({ sources, action, bare = false, onDone }) {
   const [sourceId, setSourceId] = useState("");
   const source = sources.find((row) => row.id === sourceId);
   const { submit, busy, feedback } = useAction(action);
-  return <Card title="Add record">
+  const Wrap = bare ? "div" : Card;
+  return <Wrap {...(bare ? {} : { title: "Add record" })}>
     {feedback}
     <form className="admin-form" onSubmit={(event) => {
       event.preventDefault();
@@ -66,6 +140,7 @@ export function NewKnowledgeRecord({ sources, action }) {
       submit("createKnowledgeRecord", Object.fromEntries(fields), () => {
         form.reset();
         setSourceId("");
+        onDone?.();
       });
     }}>
       <Field label="Source"><select name="sourceId" value={sourceId} required onChange={(event) => setSourceId(event.target.value)}>
@@ -80,7 +155,7 @@ export function NewKnowledgeRecord({ sources, action }) {
       <Field label="Statement"><textarea name="statement" required /></Field>
       <Button primary type="submit" disabled={busy || !source}>Add record</Button>
     </form>
-  </Card>;
+  </Wrap>;
 }
 
 export function ReviseKnowledgeRecord({ record, action }) {

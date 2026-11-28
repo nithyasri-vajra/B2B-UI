@@ -1,5 +1,6 @@
 import { Button, Card, Chip, Page, Table, useAction } from "./AdminControls";
 import "./knowledge-readiness.css";
+import { KnowledgeTabs } from "./OurUi";
 
 const verdictTone = { READY: "g", LIMITED: "a", BLOCKED: "r" };
 const shortDate = new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric" });
@@ -28,11 +29,7 @@ function LiveKnowledgeOverview({ link, action, client, data, readOnly }) {
       description={client ? "Approved brand knowledge for " + client.name + "." : "Select a brand to view its knowledge."}>
       {feedback}
       {data.brandKnowledgeLoadError && <p role="alert">Some knowledge data could not be loaded. Reload to retry.</p>}
-      <nav className="knowledge-readiness-tabs" aria-label="Knowledge sections">
-        <span aria-current="page">Overview</span>
-        {sources && <a href={sources}>Sources</a>}
-        {recordsHref && <a href={recordsHref}>Records</a>}
-      </nav>
+      <KnowledgeTabs link={link} current="Overview" showSources={Boolean(sources)} />
       <div className="our-g2">
         <section className="card">
           <div className="our-between"><h2>Published knowledge</h2>

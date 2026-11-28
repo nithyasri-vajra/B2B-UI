@@ -125,3 +125,24 @@
 .b2b-admin .my-brand-card dd { font-size: 15px; font-weight: 600; }
 .b2b-admin .my-brand-card footer { font-size: 14px; }
 .b2b-admin select.our-narrow { max-width: 320px; }
+
+/* Our tabs and dialogs */
+.b2b-admin .our-tabs { display: flex; gap: 24px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.b2b-admin .our-tab { padding: 10px 2px; font-size: 15px; color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.b2b-admin .our-tab.on { background: none; border-radius: 0; color: var(--brand); border-bottom-color: var(--brand); font-weight: 600; }
+.our-dialog { border: 1px solid var(--line); border-radius: 12px; padding: 24px; width: min(560px, calc(100vw - 32px)); box-sizing: border-box; font-family: Barlow, system-ui, sans-serif; color: var(--ink); }
+.our-dialog::backdrop { background: rgba(20, 35, 29, .35); }
+.our-dialog h2 { font-family: Montserrat, system-ui, sans-serif; font-size: 17px; margin: 0; }
+.our-dialog .our-stack { margin-top: 16px; }
+.our-dialog-actions { margin-top: 20px; justify-content: flex-end; }
+.our-dialog label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; color: #3B4A43; }
+.our-dialog input, .our-dialog select, .our-dialog textarea { min-height: 40px; border: 1px solid #D6CEBE; border-radius: 8px; padding: 0 12px; font: inherit; font-weight: 400; background: #fff; }
+.our-dialog textarea { padding: 10px 12px; min-height: 110px; }
+.our-dialog input[type=file] { padding: 8px 12px; }
+.b2b-admin .our-toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--line-soft); }
+.b2b-admin .our-toolbar input[type=search] { flex: 1 1 220px; }
+.b2b-admin .our-toolbar select { width: auto; }
+.b2b-admin .our-toolbar label { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+.b2b-admin .our-flush td:first-child, .b2b-admin .our-flush th:first-child { padding-left: 20px; }
+.b2b-admin .our-flush td:last-child, .b2b-admin .our-flush th:last-child { padding-right: 20px; }
+.b2b-admin .our-right { text-align: right; }

@@ -11,7 +11,7 @@ import {
   useAction,
 } from "./AdminControls";
 import "./knowledge-sources-records.css";
-import { NewKnowledgeRecord, ReviseKnowledgeRecord } from "./LiveKnowledge";
+import { LiveRecords, NewKnowledgeRecord, ReviseKnowledgeRecord } from "./LiveKnowledge";
 
 const states = [
   "Captured",
@@ -24,7 +24,11 @@ const states = [
 const views = ["Records", "Change proposals"];
 const decisions = ["Keep A", "Keep B", "Keep both with scope", "Escalate"];
 
-export function Records({ action, data, client, link, readOnly = false }) {
+export function Records(props) {
+  return props.data.liveAccess ? <LiveRecords {...props} /> : <PreviewRecords {...props} />;
+}
+
+function PreviewRecords({ action, data, client, link, readOnly = false }) {
   const canEdit = !readOnly && !data.liveAccess;
   const [view, setView] = useState(views[0]);
   const records = client
