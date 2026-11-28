@@ -168,11 +168,10 @@ function PostFeedback({ post, run, review, mayFinalize, canRegenerate, action })
 
 export function LivePlan({ run, data, client, action, href }) {
   const [selected, setSelected] = useState([]);
-  const [askApprover, setAskApprover] = useState(false);
   const { submit, busy, feedback } = useAction(action);
   const plan = run?.planRevisions?.at(-1);
   const roles = rolesForClient(data.session, client?.id);
-  const operator = roles.includes("marketing_operator");
+  const operator = roles.includes("operator");
   const approver = roles.includes("approver");
   const review = !client?.archived && data.reviewDecisions?.find((entry) => isPlan(entry) && entry.status === "pending" &&
     String(entry.runId) === run?.id && entry.planVersion === plan?.version &&
@@ -200,10 +199,9 @@ export function LivePlan({ run, data, client, action, href }) {
           ] };
         })} />
       {mayRequest && !review && ids.length > 0 && !["awaiting_plan_approval", "Awaiting plan approval"].includes(run.status) && <>
-        <label><input type="checkbox" checked={askApprover || !operator} disabled={!operator}
-          onChange={(event) => setAskApprover(event.target.checked)} /> {operator ? "Also ask the named approver" : "Ask the named approver"}</label>{" "}
+        {!operator && <p className="muted">The brand's named approver will review this plan.</p>}
         <Button primary disabled={busy || !selection.length} onClick={() => submit("requestPlanApproval", {
-          runId: run.id, planVersion: plan.version, selectedPlanItemIds: selection, askApprover: askApprover || !operator,
+          runId: run.id, planVersion: plan.version, selectedPlanItemIds: selection, askApprover: !operator,
         })}>Request plan review</Button>
       </>}
     </Card>

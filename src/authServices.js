@@ -7,8 +7,8 @@ const userStatuses = {
   deactivated: "Deactivated in IdP",
 };
 const clientRoles = {
-  knowledge_admin: "Knowledge Admin", approver: "Approver",
-  marketing_operator: "Marketing Operator", viewer: "Viewer",
+  brand_manager: "Brand Manager", approver: "Approver",
+  operator: "Operator", viewer: "Viewer",
 };
 const roleKeys = Object.fromEntries(
   Object.entries(clientRoles).map(([key, label]) => [label, key]),

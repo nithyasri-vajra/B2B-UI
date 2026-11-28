@@ -3,9 +3,9 @@ import { canPerformAction, rolesForClient } from "./access";
 import "./my-brands.css";
 
 const roleNames = {
-  knowledge_admin: "Brand Manager",
+  brand_manager: "Brand Manager",
   approver: "Approver",
-  marketing_operator: "Operator",
+  operator: "Operator",
   viewer: "Viewer",
 };
 const day = 86400000;
@@ -25,7 +25,7 @@ function brandSummary(client, data, session, now, weekStart, canReviewRecords) {
     if (!run) return false;
     if (item.gate === 1 && !roles.includes("approver")) {
       const owner = run.ownerEmail ?? run.owner;
-      if (!roles.includes("marketing_operator") || !session.email || typeof owner !== "string" || owner.toLowerCase() !== session.email.toLowerCase()) return false;
+      if (!roles.includes("operator") || !session.email || typeof owner !== "string" || owner.toLowerCase() !== session.email.toLowerCase()) return false;
     }
     return canPerformAction(session, client.id, item.gate === 1 ? "approvePlan" : "approvePost", run);
   });

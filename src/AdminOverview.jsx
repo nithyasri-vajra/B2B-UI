@@ -56,7 +56,7 @@ export default function AdminOverview({ link, clients, data }) {
           rows={clients.map((client) => [
             <strong>{client.name}</strong>,
             client.channel ?? "—",
-            data.users.filter((user) => user.assignments?.[client.id]?.includes("Knowledge Admin"))
+            data.users.filter((user) => user.assignments?.[client.id]?.includes("Brand Manager"))
               .map((user) => user.name ?? user.email).join(", ") || "Unassigned",
             data.users.filter((user) => user.assignments?.[client.id]?.length).length,
             readings.get(client.id)?.score ?? readings.get(client.id)?.band ?? "-",

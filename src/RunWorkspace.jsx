@@ -229,7 +229,7 @@ export default function RunWorkspace({ data, client, run, href, action, preview,
                 disabled={busy}
                 onClick={() => change("askKnowledgeAdmin")}
               >
-                Ask Knowledge Admin
+                Ask Brand Manager
               </Button>
             )}
             {canAct("rewriteWithoutClaim") && run.blocker.actions?.includes("rewriteWithoutClaim") && (

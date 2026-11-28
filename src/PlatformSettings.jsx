@@ -70,7 +70,7 @@ export function Clients({
   const members = data.users.filter((user) => user.assignments?.[index]?.length);
   const managersAvailable = data.users.filter((user) => user.status === "Active" && user.id != null);
   const profiles = (data.integrations.linkedin?.profiles ?? []).filter((profile) => profile.clientId === index);
-  const roles = [["Knowledge Admin", "Brand Manager"], ["Approver", "Approver"], ["Marketing Operator", "Operator"], ["Viewer", "Viewer"]];
+  const roles = [["Brand Manager", "Brand Manager"], ["Approver", "Approver"], ["Operator", "Operator"], ["Viewer", "Viewer"]];
   const approvers = members.filter((member) => member.assignments[index].includes("Approver"));
   function approverField(key, label) {
     const current = draft[key] ?? "";
@@ -107,7 +107,7 @@ export function Clients({
         headers={["Brand", "Brand Manager", "People", "Readiness", "Knowledge", "Last run", "Status", ""]}
         rows={items.map((brand, i) => {
           const members = data.users.filter((user) => user.assignments?.[brand.id]?.length);
-          const managers = members.filter((user) => user.assignments[brand.id].includes("Knowledge Admin"));
+          const managers = members.filter((user) => user.assignments[brand.id].includes("Brand Manager"));
           const report = data.readiness.find((item) => item.clientId === brand.id);
           const last = brand.last ?? data.runs.filter((run) => run.clientId === brand.id)
             .map((run) => run.startedAt).filter(Boolean).sort().at(-1);

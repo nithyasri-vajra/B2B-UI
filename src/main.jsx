@@ -107,7 +107,7 @@ export function B2BAgents({
   const initialPage = brandsAllowed ? "my-brands" : signedIn && requireSignIn && client ? "home" : landing(client?.id);
   const page = route || initialPage || defaultPage;
   const brandAudit = page === "audit" && params.get("scope") === "brand";
-  const knowledgeEditor = !requireSignIn || rolesForClient(session, client?.id).includes("knowledge_admin");
+  const knowledgeEditor = !requireSignIn || rolesForClient(session, client?.id).includes("brand_manager");
   const run =
     client &&
     data.runs.find(
@@ -153,18 +153,18 @@ export function B2BAgents({
     const assignedReview = data.reviewDecisions?.find((review) => review._id === payload.reviewId &&
       String(review.clientId) === targetClient && String(review.projectId) === payload.projectId);
     const livePermissions = {
-      addKnowledgeSource: platformAdmin || scopedRole.includes("knowledge_admin"),
-      createKnowledgeRecord: scopedRole.includes("knowledge_admin"),
-      reviseKnowledgeRecord: scopedRole.includes("knowledge_admin"),
+      addKnowledgeSource: platformAdmin || scopedRole.includes("brand_manager"),
+      createKnowledgeRecord: scopedRole.includes("brand_manager"),
+      reviseKnowledgeRecord: scopedRole.includes("brand_manager"),
       decideReview: Boolean(assignedReview),
-      requestPlanApproval: Boolean(actionRun && scopedRole.some((role) => ["approver", "marketing_operator"].includes(role))),
+      requestPlanApproval: Boolean(actionRun && scopedRole.some((role) => ["approver", "operator"].includes(role))),
       savePostDraft: Boolean(actionRun && data.posts.some((item) => item.id === payload.postId && item.runId === actionRun.id) &&
-        scopedRole.some((role) => ["approver", "marketing_operator"].includes(role))),
+        scopedRole.some((role) => ["approver", "operator"].includes(role))),
       regeneratePost: Boolean(actionRun && data.posts.some((item) => item.id === payload.postId && item.runId === actionRun.id) &&
-        scopedRole.some((role) => ["approver", "marketing_operator"].includes(role))),
+        scopedRole.some((role) => ["approver", "operator"].includes(role))),
       refreshApprovals: true,
       loadPostDetail: Boolean(data.posts.some((item) => item.id === payload.postId)),
-      cancelRun: Boolean(actionRun && (platformAdmin || scopedRole.some((role) => ["approver", "marketing_operator"].includes(role)))),
+      cancelRun: Boolean(actionRun && (platformAdmin || scopedRole.some((role) => ["approver", "operator"].includes(role)))),
     };
     if (requireSignIn && (
       (payload.runId !== undefined && !actionRun) ||
@@ -298,7 +298,7 @@ export function B2BAgents({
         readOnly={view === "knowledge" && !knowledgeEditor}
         canAct={(name, targetRun = run) => !requireSignIn ||
           (data.liveAccess && name === "cancelRun"
-            ? Boolean(targetRun && (platformAdmin || rolesForClient(session, client?.id).some((role) => ["approver", "marketing_operator"].includes(role))))
+            ? Boolean(targetRun && (platformAdmin || rolesForClient(session, client?.id).some((role) => ["approver", "operator"].includes(role))))
             : (!data.liveAccess || name === "saveBrief") && canPerformAction(session, client?.id, name, targetRun))}
         link={(file) => ({
           href: clientHref(file === "RecordReview.dc.html" ? "records" : "setup"),

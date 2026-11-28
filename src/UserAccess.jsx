@@ -13,9 +13,9 @@ import {
 
 const roles = [
   "Platform Admin",
-  "Knowledge Admin",
+  "Brand Manager",
   "Approver",
-  "Marketing Operator",
+  "Operator",
   "Viewer",
 ];
 const descriptions = [
@@ -228,7 +228,7 @@ function EditAccess({ user, clients, clientName, action, onClose, onSave, client
 
 import "./activity-people.css";
 
-const brandRoleBadges = [["Knowledge Admin", "Brand Manager", "BM"], ["Approver", "Approver", "AP"], ["Marketing Operator", "Operator", "OP"], ["Viewer", "Viewer", "VW"]];
+const brandRoleBadges = [["Brand Manager", "Brand Manager", "BM"], ["Approver", "Approver", "AP"], ["Operator", "Operator", "OP"], ["Viewer", "Viewer", "VW"]];
 
 export function Users({
   action,

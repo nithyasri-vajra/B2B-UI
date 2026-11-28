@@ -7,7 +7,7 @@ import "./app-shell.css";
 // person may not open that page, so role rules stay in access.js.
 
 const roleLabels = {
-  knowledge_admin: "Brand Manager", marketing_operator: "Operator",
+  brand_manager: "Brand Manager", operator: "Operator",
   approver: "Approver", viewer: "Viewer",
 };
 export const knowledgePages = ["knowledge", "readiness", "setup", "records"];

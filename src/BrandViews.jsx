@@ -5,7 +5,7 @@ import { configuredAgent, WorkflowLink } from "./OperatorHome";
 import "./brand-settings.css";
 
 const roleLabels = {
-  knowledge_admin: "Brand Manager", marketing_operator: "Operator",
+  brand_manager: "Brand Manager", operator: "Operator",
   approver: "Approver", viewer: "Viewer",
 };
 
