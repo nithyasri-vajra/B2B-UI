@@ -26,7 +26,7 @@ export function LiveApprovals({ data }) {
   return <Page className="approvals-queue-screen" title="My approvals" description="Reviews assigned to you across your brands.">
     {(loadError || (!latest && data.approvalsLoadError)) && <p role="alert">{loadError || data.approvalsLoadError}</p>}
     <Field label="Brand">
-      <select value={brand} onChange={(event) => setBrand(event.target.value)}>
+      <select className="our-narrow" value={brand} onChange={(event) => setBrand(event.target.value)}>
         <option value="">All brands</option>
         {data.clients.filter((item) => !item.archived).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
       </select>
@@ -46,7 +46,7 @@ export function LiveApprovals({ data }) {
         return { key: review._id, cells: [
           data.clients.find((item) => item.id === String(review.clientId))?.name ?? "Brand",
           (isPlan(review) ? run?.title : post?.title) ?? (isPlan(review) ? "Content plan" : "Output"),
-          review.requestedAt ? new Date(review.requestedAt).toLocaleString() : "-",
+          review.requestedAt ? reviewDate.format(new Date(review.requestedAt)) : "-",
           (run || !isPlan(review)) && <a className="btn" href={reviewHref} onClick={needsRefresh ? (event) => {
             event.preventDefault();
             window.location.hash = reviewHref;

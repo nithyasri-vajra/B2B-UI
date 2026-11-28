@@ -95,6 +95,7 @@ export function AppShell({
             <label className="shell-switch" htmlFor={switcherId}>
               <span>Brand</span>
               <select id={switcherId} value={client?.id ?? ""} onChange={(event) => onClientChange(event.target.value)}>
+                {!client && <option value="" disabled>All brands</option>}
                 {clients.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
               </select>
             </label>

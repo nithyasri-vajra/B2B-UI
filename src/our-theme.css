@@ -112,3 +112,16 @@
 .b2b-admin .our-kpi { font-family: Montserrat, system-ui, sans-serif; font-size: 26px; font-weight: 700; color: var(--ink-strong); }
 .b2b-admin td p { margin: 0; }
 @media (max-width: 860px) { .b2b-admin .our-g4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* My brands inside the shared shell: our card styling for the devs' stats and brand cards */
+.b2b-admin .my-brands-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.b2b-admin .my-brands-heading > div { flex: 1 1 240px; }
+.b2b-admin .my-brands-heading input[type=search] { width: 240px; }
+.b2b-admin .my-brands-stats > div, .b2b-admin .my-brand-card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
+.b2b-admin .my-brands-stats strong { font-family: Montserrat, system-ui, sans-serif; font-size: 26px; }
+.b2b-admin .my-brands-stats span, .b2b-admin .my-brands-stats small { font-size: 14px; color: var(--muted); }
+.b2b-admin .my-brand-card h2 { font-size: 17px; }
+.b2b-admin .my-brand-card dt { font-size: 13px; color: var(--muted); }
+.b2b-admin .my-brand-card dd { font-size: 15px; font-weight: 600; }
+.b2b-admin .my-brand-card footer { font-size: 14px; }
+.b2b-admin select.our-narrow { max-width: 320px; }

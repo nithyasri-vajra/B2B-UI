@@ -218,17 +218,31 @@ export function B2BAgents({
   const profileHref = signedIn ? workflowHref("profile") : undefined;
   if (page === "my-brands") {
     return brandsAllowed ? (
-      <MyBrands
-        clients={clients}
+      <WorkflowShell
+        page="my-brands"
         data={data}
-        session={session}
-        href={(target, id, parameters) => allowed(target, id) ? workflowHref(target, { client: id, ...parameters }) : undefined}
-        peopleHref={platformAdmin ? workflowHref("users") : undefined}
+        clients={clients}
+        onClientChange={(id) => navigate(allowed("home", id) ? "home" : landing(id) ?? "home", { client: id })}
+        href={() => undefined}
+        platformHref={(target) => platformAdmin ? workflowHref(target) : undefined}
+        brandsHref={workflowHref("my-brands")}
         approvalsHref={approvalsHref}
-        logout={logout}
         profileHref={profileHref}
-        adminHref={platformAdmin ? workflowHref("overview") : undefined}
-      />
+        onSignOut={signedIn ? () => action("signOut").catch(() => {}) : undefined}
+      >
+        <MyBrands
+          embedded
+          clients={clients}
+          data={data}
+          session={session}
+          href={(target, id, parameters) => allowed(target, id) ? workflowHref(target, { client: id, ...parameters }) : undefined}
+          peopleHref={platformAdmin ? workflowHref("users") : undefined}
+          approvalsHref={approvalsHref}
+          logout={logout}
+          profileHref={profileHref}
+          adminHref={platformAdmin ? workflowHref("overview") : undefined}
+        />
+      </WorkflowShell>
     ) : <p role="alert">My brands is unavailable for this account.</p>;
   }
   const onClientChange = (id) => {
