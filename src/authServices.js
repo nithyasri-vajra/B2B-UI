@@ -297,10 +297,14 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
     },
     async publishKnowledge({ clientId, note }) {
       const { knowledgeVersion } = await call(brandPath(clientId) + "/knowledge/versions", note ? { note } : {});
-      const { knowledgeVersions = [] } = await call(brandPath(clientId) + "/knowledge/versions").catch(() => ({}));
+      const [{ knowledgeVersions = [] }, report] = await Promise.all([
+        call(brandPath(clientId) + "/knowledge/versions").catch(() => ({})),
+        call(brandPath(clientId) + "/knowledge/readiness").catch(() => null),
+      ]);
       return { message: "Version " + knowledgeVersion.version + " published.", data: {
         clients: [{ id: clientId, knowledgeVersion: knowledgeVersion.version }],
-        knowledgeVersions: knowledgeVersions.map((row) => ({ ...row, clientId })) } };
+        knowledgeVersions: knowledgeVersions.map((row) => ({ ...row, clientId })),
+        ...(report?.readiness ? { readiness: [{ ...report.readiness, clientId }] } : {}) } };
     },
     async loadApprovals() {
       const { reviewDecisions } = await call("/workflow/approvals");
