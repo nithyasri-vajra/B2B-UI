@@ -259,7 +259,8 @@ function RecordView({ record, records, sources, client, action, link, readOnly, 
   const name = recordName(record, sources);
   const csv = isCsv(record, sources);
   const save = (changes, done) => submit("reviseKnowledgeRecord", {
-    id: record.id, currentRevision: record.currentRevision, statement: current.statement, ...changes,
+    // Only an edit sends text; approving or rejecting sends just the status (the server keeps the text).
+    id: record.id, currentRevision: record.currentRevision, ...changes,
   }, () => { setShown(null); done?.(); });
   const waiting = waitingStates.has(current.reviewStatus);
   const size = csv ? csvRows(selected.statement) + " rows"
