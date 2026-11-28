@@ -78,6 +78,7 @@ export function AppShell({
     ["users", "people", "People"],
     ["requests", "inbox", "Access requests"],
     ["agents", "bot", "Agents and skills"],
+    ["jobs", "runs", "Background jobs"],
     ["integrations", "plug", "Integrations"],
     ["audit", "list", "Audit log"],
   ];

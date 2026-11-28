@@ -6,7 +6,7 @@ const clientPages = {
 };
 
 const platformPages = [
-  "overview", "clients", "new-client", "client-settings", "users", "requests", "agents", "integrations", "audit",
+  "overview", "clients", "new-client", "client-settings", "users", "requests", "agents", "integrations", "audit", "jobs",
 ];
 
 const platformActions = [

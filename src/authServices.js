@@ -224,6 +224,9 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
       const { brand } = await call(brandPath(clientId), update, "PATCH");
       return { data: { clients: [toBrand(brand)] } };
     },
+    async loadJobs({ status } = {}) {
+      return call("/workflow/admin/jobs" + (status ? "?status=" + encodeURIComponent(status) : ""));
+    },
     // Brand settings and people for Brand Managers (and Platform Admins) of one brand.
     async loadBrandSettings({ clientId }) {
       const [{ brand }, { members }] = await Promise.all([

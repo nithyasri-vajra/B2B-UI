@@ -8,6 +8,7 @@ import { createPreviewStore } from "./createPreviewStore";
 import { restorePreviewStore } from "./previewStorage";
 import { ContentCalendar, needsFirstRunSetup, OperatorHome, WorkflowShell } from "./OperatorHome";
 import BrandSettings from "./BrandSettings";
+import JobsAdmin from "./JobsAdmin";
 import { canOpenPage, canPerformAction, hasAccess, isPlatformAdmin, landingPage, rolesForClient } from "./access";
 import SignIn from "./SignIn";
 import NewRun from "./NewRun";
@@ -44,6 +45,7 @@ const screens = {
   profile: MyProfile,
   outputs: Outputs,
   "brand-settings": BrandSettings,
+  jobs: JobsAdmin,
 };
 const earlierLinks = { "Main.dc.html": "home", "RunWorkspace.dc.html": "runs" };
 
