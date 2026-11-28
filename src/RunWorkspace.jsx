@@ -12,6 +12,7 @@ import {
 import { configuredAgent, pipeline, WorkflowLink } from "./OperatorHome";
 import { PreviewDraftResults } from "./PlanReview";
 import SkillResult from "./SkillResult";
+import { runTones, stageLabels, statusText } from "./labels";
 import "./runs.css";
 import "./run-flow.css";
 
@@ -19,18 +20,6 @@ const runDate = new Intl.DateTimeFormat("en-GB", {
   day: "numeric", month: "short", timeZone: "Asia/Kolkata",
 });
 const runOwner = (run) => run.ownerName ?? run.owner ?? run.ownerEmail;
-const runTones = { Completed: "g", Failed: "r", Blocked: "r", "Awaiting Gate 1": "b", "Awaiting Gate 2": "b",
-  "Awaiting plan approval": "b", "Awaiting post approval": "b", Scheduled: "g" };
-// Live runs carry raw status and stage keys; show them in plain words.
-const statusLabels = {
-  running: "Agents working", awaiting_plan_approval: "Awaiting plan approval", awaiting_post_approval: "Awaiting post approval",
-  writing: "Writing posts", blocked: "Blocked", failed: "Failed", cancelled: "Cancelled", completed: "Completed", draft: "Draft",
-};
-const stageLabels = {
-  "context-assembler": "Assembling context", "brief-qualifier": "Qualifying brief", "content-planner": "Planning content",
-  gate_1: "Plan review", "post-writer": "Writing posts", "post-quality-analyst": "Quality check", gate_2: "Post review",
-};
-const statusText = (value) => statusLabels[value] ?? value;
 const postSummary = (posts) => Object.entries(posts.reduce((counts, { status }) => {
   const key = String(status ?? "draft").replace(/_/g, " ").toLowerCase();
   return { ...counts, [key]: (counts[key] ?? 0) + 1 };

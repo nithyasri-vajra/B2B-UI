@@ -65,3 +65,19 @@
 @media (max-width: 760px) {
   .b2b-admin main.body { padding: 20px 16px 40px; }
 }
+
+/* Layout helpers used by the rebuilt screens */
+.b2b-admin .our-between { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.b2b-admin .our-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.b2b-admin .our-stack { display: flex; flex-direction: column; gap: 10px; }
+.b2b-admin .our-top { align-items: flex-start; flex-wrap: nowrap; }
+.b2b-admin .our-g2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
+.b2b-admin .our-strong { font-weight: 600; color: var(--ink-strong); margin: 0; font-size: 14px; }
+.b2b-admin .our-home p { margin: 0; }
+.b2b-admin .our-line { padding-top: 10px; border-top: 1px solid var(--line-soft); }
+.b2b-admin .card.our-flush { padding: 0; gap: 0; }
+.b2b-admin .our-pad { padding: 16px 20px; }
+.b2b-admin .our-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--brand); color: #fff; display: grid; place-items: center; font-weight: 600; font-size: 13px; flex: none; }
+.b2b-admin main.our-home { padding: 28px 32px 48px; display: flex; flex-direction: column; gap: 20px; max-width: 1400px; width: 100%; box-sizing: border-box; }
+.b2b-admin .our-home .brand-home-mark { width: 48px; height: 48px; border-radius: 12px; font-size: 17px; }
+@media (max-width: 860px) { .b2b-admin .our-g2 { grid-template-columns: 1fr; } .b2b-admin main.our-home { padding: 20px 16px 40px; } }

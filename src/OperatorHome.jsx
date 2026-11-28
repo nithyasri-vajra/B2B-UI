@@ -1,6 +1,7 @@
 import { useId, useState } from "react";
 import { Button, Card, Chip, Page, Tabs, useAction } from "./AdminControls";
 import { AppShell } from "./AppShell";
+import { stageLabels, statusText, statusTone } from "./labels";
 import "./workflow.css";
 import "./brand-home.css";
 import "./content-calendar.css";
@@ -135,7 +136,6 @@ export function needsFirstRunSetup(client, readiness) {
 }
 
 export function OperatorHome({ data, client, href, showSetup = false }) {
-  const [query, setQuery] = useState("");
   const scope = (items) => client ? items.filter((item) => item.clientId === client.id) : [];
   const readiness = scope(data.readiness)[0];
   const agentNames = new Map(scope(data.projects ?? []).flatMap(({ agents = [] }) =>
@@ -148,10 +148,7 @@ export function OperatorHome({ data, client, href, showSetup = false }) {
   const tasks = scope(data.tasks).filter(({ done }) => !done)
     .sort((a, b) => (a.dueAt ?? "").localeCompare(b.dueAt ?? ""));
   const today = dateKey.format(new Date());
-  const weekStart = offsetDay(today, -((new Date(today).getUTCDay() + 6) % 7));
-  const week = Array.from({ length: 7 }, (_, index) => offsetDay(weekStart, index));
   const posts = scope(data.posts).filter(({ scheduledAt }) => Number.isFinite(Date.parse(scheduledAt)));
-  const visible = (title) => String(title ?? "").toLowerCase().includes(query.trim().toLowerCase());
   const team = client ? data.users.filter((user) => user.assignments?.[client.id]?.length || user.clientAssignments?.some(
     ({ clientId }) => String(clientId) === String(client.id),
   )) : [];
@@ -165,109 +162,131 @@ export function OperatorHome({ data, client, href, showSetup = false }) {
     return <BrandSetupHome client={client} data={data} agent={agent} readiness={readiness} team={team} href={href} />;
   }
 
+  const pending = (data.reviewDecisions ?? []).filter((review) => review.status === "pending" &&
+    String(review.clientId) === String(client?.id));
+  const attention = [
+    ...pending.map((review) => {
+      const plan = review.gate === "gate_1";
+      const run = data.runs.find((item) => item.id === String(review.runId));
+      const post = data.posts.find((item) => item.id === String(review.contentItemId));
+      return { id: review._id, label: (plan ? "Plan review" : "Post review") + " · " +
+        ((plan ? run?.title ?? run?.name : post?.title) ?? (plan ? "Content plan" : "Post")),
+        detail: [run?.period, review.requestedAt && homeDate.format(new Date(review.requestedAt))].filter(Boolean).join(" · "),
+        link: href(plan ? "plan" : "post", { run: review.runId, ...(plan ? {} : { post: review.contentItemId }) }) };
+    }),
+    ...tasks.map((task) => ({ id: task.id, label: task.title, detail: task.dueAt,
+      link: task.runId && href(task.page ?? "runs", { run: task.runId, post: task.postId }) })),
+  ];
+  const upcoming = posts.filter(({ scheduledAt, status }) => Date.parse(scheduledAt) >= Date.now() - 86_400_000 &&
+    String(status).toLowerCase() !== "cancelled").sort((x, y) => x.scheduledAt.localeCompare(y.scheduledAt)).slice(0, 7);
+  const checks = [
+    { key: "profile", label: "Brand profile", detail: "Name, website and time zone",
+      ok: Boolean(client?.name && client?.website && client?.timezone) },
+    { key: "knowledge", label: "Published knowledge", detail: client?.knowledgeVersion != null
+      ? "Version " + client.knowledgeVersion + " is live" : "Approve and publish the brand knowledge", ok: client?.knowledgeVersion != null },
+    ...(agentReadiness.length ? agentReadiness.map(([key, report]) => ({ key, label: agentNames.get(key) ?? key,
+      detail: report.reason, verdict: report.verdict }))
+      : readiness ? [{ key: "readiness", label: "Knowledge readiness", detail: readiness.reason, verdict: readinessLabel }] : []),
+  ];
+  const verdictTone = { READY: "ok", LIMITED: "warn", BLOCKED: "bad" };
+  const memberRoles = (user) => (user.assignments?.[client.id] ?? user.clientAssignments?.find(
+    ({ clientId }) => String(clientId) === String(client.id))?.roles ?? []).join(" · ");
+
   return (
-    <main className="brand-home">
-      <div className="brand-home-heading">
-        <span className="brand-home-mark" aria-hidden="true">{client?.name?.split(/\s+/).slice(0, 2).map((word) => word[0]).join("").toUpperCase() || "V"}</span>
-        <div>
-          <h1>{client?.name ?? "Brand home"}</h1>
-          <p>{client ? [client.channel, client.timezone ?? "IST"].filter(Boolean).join(" · ") : "Select a client to view your workspace."}</p>
+    <main className="brand-home our-home">
+      <div className="our-between">
+        <div className="our-row">
+          <span className="brand-home-mark" aria-hidden="true">{client?.name?.split(/\s+/).slice(0, 2).map((word) => word[0]).join("").toUpperCase() || "V"}</span>
+          <div>
+            <h1>{client?.name ?? "Brand home"}</h1>
+            <p className="muted">{client ? [client.knowledgeVersion != null ? "Knowledge v" + client.knowledgeVersion : "Knowledge not published",
+              client.channel, client.timezone ?? "IST"].filter(Boolean).join(" · ") : "Select a brand to view its workspace."}</p>
+          </div>
         </div>
-        <div className="brand-home-actions">
-          <WorkflowLink href={href("calendar")}>Calendar</WorkflowLink>
+        <div className="our-row">
+          {href("calendar") && <WorkflowLink href={href("calendar")}>Calendar</WorkflowLink>}
           {start("New run")}
         </div>
       </div>
-      <section aria-labelledby="brand-home-agents">
-        <div className="brand-home-section-heading">
-          <h2 id="brand-home-agents">Agents</h2>
-          {href("agents") && <a href={href("agents")}>Manage agents</a>}
-        </div>
-        <div className="brand-home-agents">
-          <Card title={agent?.name ?? "Agent workflows"}>
-            {agent?.description && <p>{agent.description}</p>}
-            {agentReadiness.length ? agentReadiness.map(([key, report]) => (
-              <div key={key}>
-                {agentNames.get(key) ?? key} <Chip>{report.verdict}</Chip>
-                {report.reason && <p>{report.reason}</p>}
-              </div>
-            )) : <>
-              <div><Chip>{readinessLabel}</Chip></div>
-              {readiness?.reason && <p>{readiness.reason}</p>}
-            </>}
-            {readiness?.preview && !canRun && !readiness.reason && (
-              <p>{readiness.canPublish ? "Publish knowledge to start a run." : "Approve the five knowledge files to continue."}</p>
-            )}
-            {start("Start run")}
-            {data.integrations.briefTemplateUrl && (
-              <a href={data.integrations.briefTemplateUrl} download>Download brief template (.xlsx)</a>
-            )}
-          </Card>
-        </div>
-      </section>
-      <label className="brand-home-search">
-        <span>Search brand activity</span>
-        <input type="search" placeholder="Search tasks, runs and posts" value={query} onChange={(event) => setQuery(event.target.value)} />
-      </label>
-      <div className="brand-home-columns">
-        <div className="brand-home-stack">
-          <Card title="Needs your attention">
-            {tasks.filter(({ title }) => visible(title)).map((task) => (
-              <div key={task.id} className="brand-home-task">
-                <div><strong>{task.title}</strong>{task.dueAt && <p>{task.dueAt}</p>}</div>
-                {task.runId && <WorkflowLink href={href(task.page ?? "runs", { run: task.runId, post: task.postId })}>{task.page === "plan" ? "Review plan" : task.page === "post" ? "Review post" : "Open run"}</WorkflowLink>}
+
+      <div className="our-g2">
+        <section className="card">
+          <div className="our-between"><h2>{agent?.name ?? "Social Media Agent"}</h2>
+            <Chip tone={canRun ? "ok" : "bad"}>{canRun ? "Can start runs" : "Not ready to run"}</Chip></div>
+          <p className="muted">Pre-run checks. The READY, LIMITED or BLOCKED verdict for each stage comes from the agents when a run starts.</p>
+          <div className="our-stack">
+            {checks.map((check) => (
+              <div key={check.key} className="our-between our-top">
+                <div><p className="our-strong">{check.label}</p>{check.detail && <p className="muted">{check.detail}</p>}</div>
+                {check.verdict
+                  ? <Chip tone={verdictTone[check.verdict]}>{check.verdict}</Chip>
+                  : <Chip tone={check.ok ? "ok" : "bad"}>{check.ok ? "Pass" : "Needs action"}</Chip>}
               </div>
             ))}
-            {!tasks.some(({ title }) => visible(title)) && <p>{query ? "No matching tasks." : "No tasks waiting for you."}</p>}
-          </Card>
-          <Card title="Active runs">
-            {href("runs") && <a href={href("runs")}>All runs</a>}
-            <div className="brand-home-runs">
-              {runs.filter((run) => visible(run.name ?? run.period ?? run.id)).map((run) => (
-                <div key={run.id}>
-                  <strong>{run.name ?? run.period ?? run.id}</strong> <Chip>{run.status}</Chip>
-                  {run.currentStep && <p>{run.currentStep}</p>}
-                  {run.progressLabel && <p>{run.progressLabel}</p>}
-                  <WorkflowLink href={href("runs", { run: run.id })}>Open run</WorkflowLink>
-                </div>
+          </div>
+          {data.integrations.briefTemplateUrl && (
+            <a href={data.integrations.briefTemplateUrl} download>Download brief template (.xlsx)</a>
+          )}
+        </section>
+        <section className="card">
+          <div className="our-between"><h2>Needs your attention</h2><Chip>{attention.length} item{attention.length === 1 ? "" : "s"}</Chip></div>
+          {!attention.length && <p className="muted">Nothing is waiting for you in this brand.</p>}
+          {attention.map((item) => (
+            <div key={item.id} className="our-between our-line">
+              <div><p className="our-strong">{item.label}</p>{item.detail && <p className="muted">{item.detail}</p>}</div>
+              {item.link && <WorkflowLink href={item.link} primary>Review</WorkflowLink>}
+            </div>
+          ))}
+        </section>
+      </div>
+
+      <section className="card our-flush">
+        <div className="our-between our-pad"><h2>Active runs</h2>{href("runs") && <a href={href("runs")}>All runs</a>}</div>
+        <div className="admin-table">
+          <table>
+            <thead><tr><th>Run</th><th>Period</th><th>Status</th><th>Started by</th></tr></thead>
+            <tbody>
+              {runs.map((run) => (
+                <tr key={run.id}>
+                  <td><a href={href("runs", { run: run.id })}>{run.title ?? run.name ?? "Run " + run.id.slice(-6)}</a></td>
+                  <td>{run.period ?? data.briefs?.find(({ id }) => String(id) === String(run.briefId))?.title ?? "—"}</td>
+                  <td><Chip tone={statusTone(run.status)}>{statusText(run.status)}</Chip>
+                    {(run.progressLabel ?? stageLabels[run.currentStageKey]) && <p className="muted">{run.progressLabel ?? stageLabels[run.currentStageKey]}</p>}</td>
+                  <td>{run.ownerName ?? run.owner ?? run.ownerEmail ?? "—"}</td>
+                </tr>
               ))}
-            </div>
-            {!runs.some((run) => visible(run.name ?? run.period ?? run.id)) && <p>{query ? "No matching runs." : "No active runs."}</p>}
-          </Card>
-          <Card title="This week">
-            {href("calendar") && <a href={href("calendar")}>Open calendar</a>}
-            <div className="brand-home-week">
-              {week.map((date) => {
-                const key = dateKey.format(date);
-                return <div key={key} aria-current={key === today ? "date" : undefined}>
-                  <strong>{new Intl.DateTimeFormat("en-IN", { weekday: "short", day: "numeric", timeZone: calendarZone }).format(date)}</strong>
-                  {posts.filter((post) => dateKey.format(new Date(post.scheduledAt)) === key && visible(post.title)).map((post) => (
-                    <div className="brand-home-post" key={post.id}><Chip>{post.status}</Chip><span>{post.title}</span><small>{calendarTime.format(new Date(post.scheduledAt))}</small></div>
-                  ))}
-                </div>;
-              })}
-            </div>
-          </Card>
+              {!runs.length && <tr><td colSpan={4} className="muted">No active runs.</td></tr>}
+            </tbody>
+          </table>
         </div>
-        <div className="brand-home-stack">
-          <Card title="Knowledge">
-            <div className="brand-home-score"><Chip>{readinessLabel}</Chip></div>
-            {href("knowledge") && <a href={href("knowledge")}>View knowledge</a>}
-          </Card>
-          <Card title="Team">
-            {team.length ? team.map((user) => (
-              <div className="brand-home-member" key={user.email}>
-                <span className="brand-home-mark" aria-hidden="true">{(user.name || user.email)?.[0]?.toUpperCase()}</span>
-                <strong>{user.name || user.email}</strong>
-              </div>
-            )) : <p>No team details are available in this workspace.</p>}
-          </Card>
-        </div>
+      </section>
+
+      <div className="our-g2">
+        <section className="card">
+          <div className="our-between"><h2>Coming up</h2>{href("calendar") && <a href={href("calendar")}>Open calendar</a>}</div>
+          {!upcoming.length && <p className="muted">No posts scheduled yet.</p>}
+          {upcoming.map((post) => (
+            <div key={post.id} className="our-between">
+              <div><p className="our-strong">{post.title}</p><p className="muted">{homeDate.format(new Date(post.scheduledAt))}</p></div>
+              <Chip tone={statusTone(post.displayStatus ?? post.status)}>{post.displayStatus ?? statusText(post.status)}</Chip>
+            </div>
+          ))}
+        </section>
+        <section className="card">
+          <div className="our-between"><h2>Team</h2>{href("brand-settings") && <a href={href("brand-settings")}>Manage people</a>}</div>
+          {team.length ? team.map((user) => (
+            <div className="our-row" key={user.email}>
+              <span className="our-avatar" aria-hidden="true">{(user.name || user.email)?.[0]?.toUpperCase()}</span>
+              <div><p className="our-strong">{user.name || user.email}</p><p className="muted">{memberRoles(user)}</p></div>
+            </div>
+          )) : <p className="muted">Ask a Brand Manager to see who works on this brand.</p>}
+        </section>
       </div>
     </main>
   );
 }
 
+const homeDate = new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 const calendarZone = "Asia/Kolkata";
 const dateKey = new Intl.DateTimeFormat("sv-SE", { timeZone: calendarZone, dateStyle: "short" });
 const calendarTime = new Intl.DateTimeFormat("en-IN", { timeZone: calendarZone, timeStyle: "short" });
