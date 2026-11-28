@@ -11,7 +11,7 @@ const roleOptions = [
 ];
 const detailFields = [
   ["name", "Brand name", true], ["website", "Website", true], ["industry", "Industry", false],
-  ["timezone", "Time zone", true], ["spelling", "Spelling (for example en-GB)", false],
+  ["timezone", "Time zone", true],
 ];
 
 function RoleChecks({ value, onChange, disabled, idPrefix }) {
