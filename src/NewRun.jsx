@@ -83,7 +83,7 @@ function LiveBrief({ brief, projectId, client, action }) {
         <Button primary disabled={busy || checking} onClick={() => fileInput.current?.click()}>{brief || fileName ? "Replace brief" : "Choose brief"}</Button>
         {checking && <span className="muted" role="status">Checking…</span>}
         {fileName && !checking && <span>{fileName}</span>}
-        {!started && <Button onClick={() => setEditFields(true)}>Enter details by hand</Button>}
+        {!started && <Button onClick={() => { setEditFields(true); setValidation(null); }}>Enter details by hand</Button>}
       </div>
       {validation?.validated && <div className="our-alert ok" role="status">All required fields are present and valid.</div>}
       {validation && !validation.validated && <div className="our-alert bad" role="alert"><div><strong>Fix these in the workbook and upload it again:</strong>
