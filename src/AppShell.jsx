@@ -109,7 +109,9 @@ export function AppShell({
               <NavItem href={href("outputs")} icon="file" current={current === "outputs"}>Outputs</NavItem>
               <NavItem href={knowledgeHref} icon="book" current={current === "knowledge"}>Knowledge</NavItem>
               {!admin && <NavItem href={href("audit")} icon="list" current={current === "audit"}>Audit log</NavItem>}
-              {admin && <NavItem href={platformHref("client-settings")} icon="gear" current={current === "client-settings"}>Brand settings</NavItem>}
+              {admin
+                ? <NavItem href={platformHref("client-settings")} icon="gear" current={current === "client-settings"}>Brand settings</NavItem>
+                : <NavItem href={href("brand-settings")} icon="gear" current={current === "brand-settings"}>Brand settings</NavItem>}
             </>
           )}
           {admin && (

@@ -7,6 +7,7 @@ import KnowledgeReadiness from "./KnowledgeReadiness";
 import { createPreviewStore } from "./createPreviewStore";
 import { restorePreviewStore } from "./previewStorage";
 import { ContentCalendar, needsFirstRunSetup, OperatorHome, WorkflowShell } from "./OperatorHome";
+import BrandSettings from "./BrandSettings";
 import { canOpenPage, canPerformAction, hasAccess, isPlatformAdmin, landingPage, rolesForClient } from "./access";
 import SignIn from "./SignIn";
 import NewRun from "./NewRun";
@@ -42,6 +43,7 @@ const screens = {
   calendar: ContentCalendar,
   profile: MyProfile,
   outputs: Outputs,
+  "brand-settings": BrandSettings,
 };
 const earlierLinks = { "Main.dc.html": "home", "RunWorkspace.dc.html": "runs" };
 

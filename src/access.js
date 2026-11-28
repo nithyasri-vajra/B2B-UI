@@ -1,5 +1,5 @@
 const clientPages = {
-  brand_manager: ["home", "runs", "plan", "post", "calendar", "setup", "records", "knowledge", "readiness", "audit"],
+  brand_manager: ["home", "runs", "plan", "post", "calendar", "setup", "records", "knowledge", "readiness", "audit", "brand-settings"],
   approver: ["home", "new-run", "runs", "approvals", "plan", "post", "calendar", "records", "knowledge", "readiness"],
   operator: ["home", "new-run", "runs", "approvals", "plan", "post", "calendar", "records", "knowledge", "readiness"],
   viewer: ["home", "runs", "plan", "post", "calendar", "records", "knowledge", "readiness", "audit"],

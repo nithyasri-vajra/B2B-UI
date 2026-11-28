@@ -213,6 +213,21 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
       const { brand } = await call(brandPath(clientId), update, "PATCH");
       return { data: { clients: [toBrand(brand)] } };
     },
+    // Brand settings and people for Brand Managers (and Platform Admins) of one brand.
+    async loadBrandSettings({ clientId }) {
+      const [{ brand }, { members }] = await Promise.all([
+        call(brandPath(clientId)), call(brandPath(clientId) + "/members"),
+      ]);
+      return { brand: toBrand(brand), members };
+    },
+    async saveBrandDetails({ clientId, values }) {
+      const { brand } = await call(brandPath(clientId), values, "PATCH");
+      return { brand: toBrand(brand), message: "Brand settings saved." };
+    },
+    async saveBrandMember({ clientId, email, roles }) {
+      const { member } = await call(brandPath(clientId) + "/members", { email, roles }, "PUT");
+      return { member, message: roles.length ? "Access saved for " + email + "." : email + " was removed from this brand." };
+    },
     async archiveClient({ clientId }) {
       const { brand } = await call(brandPath(clientId), { status: "archived" }, "PATCH");
       return { data: { clients: [toBrand(brand)] } };
