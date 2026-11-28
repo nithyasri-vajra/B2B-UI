@@ -224,6 +224,10 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
       const { brand } = await call(brandPath(clientId), update, "PATCH");
       return { data: { clients: [toBrand(brand)] } };
     },
+    // Platform Admin: agents, their pipelines and whether each skill is configured on the server.
+    async loadAgents() {
+      return call("/workflow/agents");
+    },
     async loadJobs({ status } = {}) {
       return call("/workflow/admin/jobs" + (status ? "?status=" + encodeURIComponent(status) : ""));
     },

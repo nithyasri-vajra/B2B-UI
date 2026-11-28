@@ -11,7 +11,7 @@ const platformPages = [
 
 const platformActions = [
   "loadClients", "createClient", "saveClientSettings", "archiveClient", "reconnectClientLinkedIn",
-  "loadUsers", "saveUserAccess", "preAddUser", "suspendUser", "removeUserFromClient",
+  "loadUsers", "loadAgents", "saveUserAccess", "preAddUser", "suspendUser", "removeUserFromClient",
   "declineAccessRequest", "enableAgentVersion", "saveAgentLimits", "testLinkedInConnection", "revokeLinkedInTestProfile",
 ];
 const knowledgeActions = [
