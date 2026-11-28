@@ -273,6 +273,8 @@ export function LivePost({ post, run, data, action, href }) {
         <Button onClick={() => setDraft(null)} disabled={busy}>Cancel</Button>
       </form> : <>
         <p style={{ whiteSpace: "pre-wrap" }}>{post?.copy ?? "No draft text is available."}</p>
+        {currentDraft?.qaFixRounds > 0 && <p className="muted">Quality check asked for changes, so the writer
+          rewrote this draft automatically {currentDraft.qaFixRounds === 1 ? "once" : currentDraft.qaFixRounds + " times"} before review.</p>}
         {canEdit && <Button disabled={request.busy} onClick={() => setDraft({ id: post.currentDraftVersionId, text: post.copy ?? "" })}>Edit draft</Button>}
       </>}
     </Card>
