@@ -1,6 +1,6 @@
 // Plain-word labels for the raw run status and stage keys the live backend sends.
 export const runTones = { Completed: "g", Failed: "r", Blocked: "r", "Awaiting Gate 1": "b", "Awaiting Gate 2": "b",
-  "Awaiting plan approval": "b", "Awaiting post approval": "b", Scheduled: "g", "Agents working": "a", "Writing posts": "a" };
+  "Awaiting plan approval": "b", "Awaiting post approval": "b", Scheduled: "g", "Awaiting approval": "b", "Changes requested": "a", Live: "g", Approved: "g", "Agents working": "a", "Writing posts": "a" };
 export const statusLabels = {
   running: "Agents working", awaiting_plan_approval: "Awaiting plan approval", awaiting_post_approval: "Awaiting post approval",
   writing: "Writing posts", blocked: "Blocked", failed: "Failed", cancelled: "Cancelled", completed: "Completed", draft: "Draft",

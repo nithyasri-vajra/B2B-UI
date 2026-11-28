@@ -12,7 +12,7 @@ import {
 import { configuredAgent, pipeline, WorkflowLink } from "./OperatorHome";
 import { PreviewDraftResults } from "./PlanReview";
 import SkillResult from "./SkillResult";
-import { runTones, stageLabels, statusText } from "./labels";
+import { runTones, stageLabels, statusText, statusTone } from "./labels";
 import "./runs.css";
 import "./run-flow.css";
 
@@ -119,6 +119,34 @@ function RunPipeline({ run, agent, planning }) {
   );
 }
 
+const liveStageOrder = ["context-assembler", "brief-qualifier", "content-planner", "gate_1", "post-writer", "post-quality-analyst", "gate_2"];
+const postDate = new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+
+// Our step strip: one box per stage, using the latest execution of each stage.
+function LiveStages({ run }) {
+  const latest = new Map((run.stageExecutions ?? []).map((stage) => [stage.stageKey, stage]));
+  const runStatus = String(run.status).toLowerCase();
+  const gateState = (key) => key === "gate_1"
+    ? (runStatus === "awaiting_plan_approval" || /plan approval/i.test(run.status) ? "waiting" : latest.has("post-writer") ? "completed" : "pending")
+    : (runStatus === "awaiting_post_approval" || /post approval/i.test(run.status) ? "waiting" : ["completed", "scheduled"].includes(runStatus) ? "completed" : "pending");
+  return (
+    <section className="card">
+      <div className="our-steps">
+        {liveStageOrder.map((key) => {
+          const stage = latest.get(key);
+          const state = key.startsWith("gate_") ? gateState(key) : stage?.status ?? "pending";
+          const verdict = stage?.output?.verdict;
+          return <div key={key} className={"our-step " + state}>
+            <p className="our-strong">{stageLabels[key]}</p>
+            <p className="muted">{state === "running" ? "Working…" : state === "waiting" ? "Waiting for review" : state}{verdict ? " · " + verdict : ""}{stage?.attempt > 1 ? " · attempt " + stage.attempt : ""}</p>
+          </div>;
+        })}
+      </div>
+      {runStatus === "running" || runStatus === "writing" ? <p className="muted">The agents are working. This page updates when you reload; you can leave and come back.</p> : null}
+    </section>
+  );
+}
+
 export default function RunWorkspace({ data, client, run, href, action, preview, canAct = () => true }) {
   const [tab, setTab] = useState("Activity");
   const [answer, setAnswer] = useState("");
@@ -162,11 +190,12 @@ export default function RunWorkspace({ data, client, run, href, action, preview,
   return (
     <Page
       className="run-detail-screen"
-      title={run.name ?? [agent?.name ?? "Agent run", run.period ?? run.id].join(" / ")}
-      description={[agent?.name, run.id, runOwner(run), run.startedAt, run.knowledgeVersion != null && `Knowledge ${run.knowledgeVersion}`, run.briefVersion != null && `Brief v${run.briefVersion}`].filter(Boolean).join(" · ")}
+      title={run.title ?? run.name ?? [agent?.name ?? "Agent run", run.period ?? "Run " + String(run.id).slice(-6)].join(" / ")}
+      description={[agent?.name, "Run " + String(run.id).slice(-6), runOwner(run) && "started by " + runOwner(run),
+        run.startedAt && Number.isFinite(Date.parse(run.startedAt)) ? postDate.format(new Date(run.startedAt)) : run.startedAt, run.knowledgeVersion != null && `Knowledge ${run.knowledgeVersion}`, run.briefVersion != null && `Brief v${run.briefVersion}`].filter(Boolean).join(" · ")}
       actions={
         <>
-          <Chip tone="b">{run.status}</Chip>
+          <Chip tone={statusTone(run.status) ?? "b"}>{statusText(run.status)}</Chip>
           {canChange && (
             <>
               {!data.liveAccess && <WorkflowLink href={href("new-run", { run: run.id })}>
@@ -179,14 +208,19 @@ export default function RunWorkspace({ data, client, run, href, action, preview,
       }
     >
       <a href={href("runs")}>← Runs</a>
-      {data.liveAccess ? <Card title="Run stages">
-        <Table headers={["Stage", "Status", "Finished"]}
-          rows={(run.stageExecutions ?? []).map((stage) => [stage.stageKey, stage.status, stage.finishedAt ?? "-"])}
-          empty="No stage executions are recorded for this run." />
-      </Card> : <RunPipeline run={run} agent={agent} planning={planningNow} />}
-      {data.liveAccess && run.planRevisions?.length > 0 && <Card title="Content plan">
-        <WorkflowLink href={href("plan", { run: run.id })} gate>Open plan review</WorkflowLink>
-      </Card>}
+      {data.liveAccess ? <LiveStages run={run} /> : <RunPipeline run={run} agent={agent} planning={planningNow} />}
+      {data.liveAccess && run.blocker?.reason && String(run.status).toLowerCase() === "blocked" && (
+        <div className="our-alert bad" role="alert"><div><strong>Run blocked.</strong> {run.blocker.reason}
+          <p className="muted">Upload a corrected brief and start a new run.</p></div></div>
+      )}
+      {data.liveAccess && run.planRevisions?.length > 0 && (
+        <div className={"our-alert " + (/plan/i.test(statusText(run.status)) ? "warn" : "info")}>
+          <span>{/plan/i.test(statusText(run.status))
+            ? <><strong>The content plan is ready.</strong> It needs approval before any post is written.</>
+            : <><strong>Content plan</strong> · version {run.planRevisions.at(-1)?.version ?? run.planRevisions.length}</>}</span>
+          <WorkflowLink href={href("plan", { run: run.id })} primary>Open plan</WorkflowLink>
+        </div>
+      )}
       {run.qualificationResult && (
         <Card title="Brief qualification">
           {run.qualificationResult.error && <p role="alert">{run.qualificationResult.error}</p>}
@@ -301,12 +335,10 @@ export default function RunWorkspace({ data, client, run, href, action, preview,
                   href={href("post", { run: run.id, post: firstReview.id })}
                   gate
                 >
-                  Review{" "}
-                  {
-                    posts.filter((item) => item.status === "Awaiting approval")
-                      .length
-                  }{" "}
-                  posts
+                  {(() => {
+                    const count = posts.filter((item) => item.status === "Awaiting approval").length;
+                    return "Review " + count + (count === 1 ? " post" : " posts");
+                  })()}
                 </WorkflowLink>
               )}
             </div>
@@ -315,13 +347,13 @@ export default function RunWorkspace({ data, client, run, href, action, preview,
             headers={["#", "Publishes", "Pillar", "Post", "QA", "Status"]}
             rows={posts.map((item, index) => [
               index + 1,
-              item.scheduledAt ?? "-",
+              item.scheduledAt && Number.isFinite(Date.parse(item.scheduledAt)) ? postDate.format(new Date(item.scheduledAt)) : "-",
               item.pillar ?? "-",
               href("post") ? <a href={href("post", { run: run.id, post: item.id })}>
                 {item.title}
               </a> : item.title,
-              item.qaStatus ?? "-",
-              <Chip>{item.status}</Chip>,
+              item.qaStatus ?? item.qa?.verdict ?? "-",
+              <Chip tone={statusTone(item.displayStatus ?? item.status)}>{item.displayStatus ?? statusText(item.status)}</Chip>,
             ])}
             empty="Posts will appear here when the agent produces them."
           />

@@ -81,3 +81,20 @@
 .b2b-admin main.our-home { padding: 28px 32px 48px; display: flex; flex-direction: column; gap: 20px; max-width: 1400px; width: 100%; box-sizing: border-box; }
 .b2b-admin .our-home .brand-home-mark { width: 48px; height: 48px; border-radius: 12px; font-size: 17px; }
 @media (max-width: 860px) { .b2b-admin .our-g2 { grid-template-columns: 1fr; } .b2b-admin main.our-home { padding: 20px 16px 40px; } }
+
+/* Run detail: step strip, alerts, stacked columns */
+.b2b-admin .our-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.b2b-admin .our-step { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: #FBF9F5; }
+.b2b-admin .our-step p { margin: 0; text-transform: none; }
+.b2b-admin .our-step .muted { font-size: 13px; }
+.b2b-admin .our-step .muted::first-letter { text-transform: uppercase; }
+.b2b-admin .our-step.completed { border-color: #BFD8C8; background: var(--ok-bg); }
+.b2b-admin .our-step.running, .b2b-admin .our-step.waiting { border-color: #E5C98A; background: var(--warn-bg); }
+.b2b-admin .our-step.failed, .b2b-admin .our-step.blocked { border-color: #E8B4AC; background: var(--bad-bg); }
+.b2b-admin .our-alert { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; border-radius: 10px; padding: 14px 16px; border: 1px solid var(--line); background: #fff; }
+.b2b-admin .our-alert p { margin: 4px 0 0; }
+.b2b-admin .our-alert.bad { background: var(--bad-bg); border-color: #E8B4AC; }
+.b2b-admin .our-alert.warn { background: var(--warn-bg); border-color: #E5C98A; }
+.b2b-admin .our-alert.info { background: var(--info-bg); border-color: #BCD0E6; }
+.b2b-admin .run-detail-screen .workflow-columns { display: flex; flex-direction: column; gap: 20px; }
+.b2b-admin .run-detail-screen .workflow-columns > * { flex: none; width: 100%; box-sizing: border-box; }
