@@ -153,3 +153,51 @@
 .b2b-admin .person-access-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
 .b2b-admin .person-access-form > .card { width: 100%; box-sizing: border-box; }
 @media (max-width: 860px) { .b2b-admin .person-access-controls { grid-template-columns: 1fr; } }
+
+/* Knowledge record page: document on the left, review and details on the right. */
+.b2b-admin .our-record { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
+@media (max-width: 1100px) { .b2b-admin .our-record { grid-template-columns: 1fr; } }
+.b2b-admin .our-record aside h2 { margin: 0; }
+.b2b-admin .our-doc-card { padding: 0; }
+.b2b-admin .our-doc-head { padding: 14px 24px; border-bottom: 1px solid var(--line-soft); flex-wrap: wrap; gap: 10px; position: sticky; top: 0; background: #fff; border-radius: 12px 12px 0 0; z-index: 1; }
+.b2b-admin .our-doc-head select { width: auto; }
+.b2b-admin .our-doc { padding: 8px 32px 28px; font-size: 15px; line-height: 1.65; color: var(--ink); overflow-wrap: anywhere; }
+.b2b-admin .our-doc h2, .b2b-admin .our-doc h3, .b2b-admin .our-doc h4, .b2b-admin .our-doc h5, .b2b-admin .our-doc h6 { font-family: Montserrat, system-ui, sans-serif; margin: 26px 0 8px; line-height: 1.3; }
+.b2b-admin .our-doc h2 { font-size: 21px; } .b2b-admin .our-doc h3 { font-size: 17px; padding-top: 14px; border-top: 1px solid var(--line-soft); } .b2b-admin .our-doc h4 { font-size: 15px; }
+.b2b-admin .our-doc p { margin: 0 0 12px; }
+.b2b-admin .our-doc ul, .b2b-admin .our-doc ol { margin: 0 0 14px; padding-left: 22px; }
+.b2b-admin .our-doc li { margin: 4px 0; }
+.b2b-admin .our-doc blockquote { margin: 0 0 14px; padding: 10px 16px; border-left: 3px solid #C9A227; background: #FBF7EC; border-radius: 0 8px 8px 0; color: #4A5650; }
+.b2b-admin .our-doc code { background: #F1ECE1; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+.b2b-admin .our-doc hr { border: 0; border-top: 1px solid var(--line); margin: 20px 0; }
+.b2b-admin .our-doc-table { overflow-x: auto; margin: 0 0 16px; border: 1px solid var(--line-soft); border-radius: 8px; }
+.b2b-admin .our-doc-table table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.b2b-admin .our-doc-table th, .b2b-admin .our-doc-table td { padding: 8px 12px; border-bottom: 1px solid var(--line-soft); text-align: left; vertical-align: top; }
+.b2b-admin .our-doc-table th { background: #F7F3EA; font-weight: 600; }
+.b2b-admin .our-doc-edit { padding: 20px 24px; }
+.b2b-admin .our-doc-edit textarea { min-height: 60vh; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; line-height: 1.55; padding: 14px; border: 1px solid #D6CEBE; border-radius: 8px; width: 100%; box-sizing: border-box; }
+.b2b-admin .our-record aside label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; color: #3B4A43; }
+.b2b-admin .our-record aside .our-row select { flex: 1; }
+.b2b-admin .our-revlist { list-style: none; margin: 0; padding: 0 0 8px; }
+.b2b-admin .our-revlist li { padding: 8px 20px; border-top: 1px solid var(--line-soft); }
+.b2b-admin .our-revlist li.on { background: #F2F6F3; }
+.b2b-admin .our-revlist li p { margin: 2px 0 0; font-size: 13px; }
+.b2b-admin .our-revlist button { display: flex; justify-content: space-between; align-items: center; width: 100%; background: none; border: 0; padding: 0; font: inherit; font-weight: 600; cursor: pointer; color: inherit; }
+.b2b-admin button.our-linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--brand); text-decoration: underline; cursor: pointer; }
+.b2b-admin .our-record-page .our-alert { margin: 0; }
+.b2b-admin .our-record aside { position: sticky; top: 16px; }
+.b2b-admin label.our-label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; color: #3B4A43; }
+.b2b-admin label.our-label textarea { min-height: 72px; border: 1px solid #D6CEBE; border-radius: 8px; padding: 10px 12px; font: inherit; font-weight: 400; }
+.our-dialog label.our-file-pick { display: flex; align-items: center; justify-content: center; min-height: 72px; border: 1.5px dashed #C9BFA9; border-radius: 10px; background: #FBF8F2; cursor: pointer; font-weight: 600; color: var(--brand, #1B4D3E); }
+.our-dialog label.our-file-pick input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.our-dialog { width: min(680px, calc(100vw - 32px)); }
+.our-upload-list { width: 100%; border-collapse: collapse; }
+.our-upload-list td { padding: 10px 8px; border-top: 1px solid #F0EBE1; vertical-align: middle; }
+.our-upload-list td p { margin: 0; }
+.our-upload-list input { width: 160px; }
+.our-error { color: #A23B2A; margin: 4px 0 0; }
+.b2b-admin .our-csv td { white-space: pre-wrap; min-width: 90px; }
+.b2b-admin .our-doc-table.our-csv { max-height: 70vh; overflow: auto; }
+.b2b-admin .our-csv th { position: sticky; top: 0; z-index: 1; }
+.b2b-admin .our-csv td { max-width: 420px; }
+.b2b-admin .our-csv td > div { max-height: 7.5em; overflow: auto; }

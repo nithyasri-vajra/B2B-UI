@@ -252,14 +252,16 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
     },
     async readBrandKnowledge(clientId, { sources, records }) {
       const base = brandPath(clientId) + "/knowledge";
-      const [report, uploads, entries] = await Promise.allSettled([
+      const [report, uploads, entries, history] = await Promise.allSettled([
         call(base + "/readiness"), sources && call(base + "/sources"), records && call(base + "/records"),
+        call(base + "/versions"),
       ]);
       return {
         readiness: report.value?.readiness ? [{ ...report.value.readiness, clientId }] : [],
         version: report.value?.version,
         uploads: (uploads.value?.knowledgeSources ?? []).map((row) => sourceRow(row, clientId)),
         records: (entries.value?.knowledgeRecords ?? []).map((row) => knowledgeRow(row, clientId)),
+        knowledgeVersions: (history.value?.knowledgeVersions ?? []).map((row) => ({ ...row, clientId })),
         failed: [report, uploads, entries].some(({ status }) => status === "rejected"),
       };
     },
@@ -276,9 +278,9 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
         const form = new FormData();
         form.append("file", file);
         for (const area of areas) form.append("areas", area);
-        const { source, record } = await call(brandPath(clientId) + "/knowledge/sources/upload", form);
+        const { source, record, revised } = await call(brandPath(clientId) + "/knowledge/sources/upload", form);
         const upload = sourceRow(source, clientId);
-        return { message: "File uploaded. Processing status: " + (upload.status ?? "Unknown") + ".",
+        return { message: revised ? name + " uploaded as revision " + record.currentRevision + "." : name + " uploaded.",
           data: { uploads: [upload], ...(record ? { records: [knowledgeRow(record, clientId)] } : {}) } };
       }
       const { source } = await call(brandPath(clientId) + "/knowledge/sources", { title, url, areas, sourceType: "link" });
@@ -288,14 +290,17 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
       const { record } = await call(brandPath(clientId) + "/knowledge/records", { sourceId, area, recordType, statement });
       return { data: { records: [knowledgeRow(record, clientId)] } };
     },
-    async reviseKnowledgeRecord({ clientId, id, currentRevision, reviewStatus, statement, evidenceGrade }) {
+    async reviseKnowledgeRecord({ clientId, id, currentRevision, reviewStatus, statement, evidenceGrade, reviewDueAt }) {
       const { record } = await call(brandPath(clientId) + "/knowledge/records/" + pathId(id) + "/revisions",
-        { currentRevision, reviewStatus, statement, evidenceGrade });
+        { currentRevision, reviewStatus, statement, evidenceGrade, ...(reviewDueAt ? { reviewDueAt } : {}) });
       return { data: { records: [knowledgeRow(record, clientId)] } };
     },
-    async publishKnowledge({ clientId }) {
-      const { knowledgeVersion } = await call(brandPath(clientId) + "/knowledge/versions", {});
-      return { message: "Knowledge version published.", data: { clients: [{ id: clientId, knowledgeVersion: knowledgeVersion.version }] } };
+    async publishKnowledge({ clientId, note }) {
+      const { knowledgeVersion } = await call(brandPath(clientId) + "/knowledge/versions", note ? { note } : {});
+      const { knowledgeVersions = [] } = await call(brandPath(clientId) + "/knowledge/versions").catch(() => ({}));
+      return { message: "Version " + knowledgeVersion.version + " published.", data: {
+        clients: [{ id: clientId, knowledgeVersion: knowledgeVersion.version }],
+        knowledgeVersions: knowledgeVersions.map((row) => ({ ...row, clientId })) } };
     },
     async loadApprovals() {
       const { reviewDecisions } = await call("/workflow/approvals");

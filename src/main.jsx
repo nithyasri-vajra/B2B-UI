@@ -367,7 +367,7 @@ if (mount && authApiPath) {
             if (result.version != null) brand.knowledgeVersion = result.version;
             return result;
           }));
-        for (const key of ["readiness", "uploads", "records"])
+        for (const key of ["readiness", "uploads", "records", "knowledgeVersions"])
           data[key] = knowledge.flatMap((result) => result[key]);
         data.brandKnowledgeLoadError = knowledge.some((result) => result.failed);
         try {

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Button, Card, Chip, Page, Table, useAction } from "./AdminControls";
 import "./knowledge-readiness.css";
 import { KnowledgeTabs } from "./OurUi";
@@ -10,20 +11,18 @@ const asDate = (value) => value && Number.isFinite(Date.parse(value)) ? shortDat
 function LiveKnowledgeOverview({ link, action, client, data, readOnly }) {
   const report = data.readiness.find((item) => item.clientId === client?.id);
   const { submit, busy, feedback } = useAction(action);
+  const [note, setNote] = useState("");
   const sources = link("KnowledgeSetup.dc.html").href;
   const recordsHref = link("RecordReview.dc.html").href;
   const records = (data.records ?? []).filter((record) => record.clientId === client?.id);
-  const approved = records.filter(({ state }) => /approved/i.test(state ?? "")).length;
-  const waiting = records.filter(({ state }) => /pending|draft|review/i.test(state ?? "")).length;
-  const uploads = (data.uploads ?? []).filter((row) => row.clientId === client?.id);
-  const versions = (data.projectKnowledgeVersions ?? []).filter((row) => row.clientId === client?.id)
+  const status = (record) => record.revisions?.find((entry) => entry.revision === record.currentRevision)?.reviewStatus;
+  const approved = records.filter((record) => status(record) === "approved").length;
+  const waiting = records.filter((record) => ["needs_review", "captured", "verified"].includes(status(record))).length;
+  const versions = (data.knowledgeVersions ?? []).filter((row) => row.clientId === client?.id)
     .sort((a, b) => (b.version ?? 0) - (a.version ?? 0));
   const agents = Object.entries(report?.perAgent ?? {});
   const names = new Map((data.projects ?? []).filter(({ clientId }) => clientId === client?.id)
     .flatMap(({ agents: list = [] }) => list.map(({ agentKey, name }) => [agentKey, name])));
-  const now = Date.now();
-  const due = records.filter((record) => Date.parse(record.reviewBy) <= now + 7 * 86400000)
-    .sort((a, b) => Date.parse(a.reviewBy) - Date.parse(b.reviewBy));
   return (
     <Page className="knowledge-readiness" title="Knowledge"
       description={client ? "Approved brand knowledge for " + client.name + "." : "Select a brand to view its knowledge."}>
@@ -31,13 +30,21 @@ function LiveKnowledgeOverview({ link, action, client, data, readOnly }) {
       {data.brandKnowledgeLoadError && <p role="alert">Some knowledge data could not be loaded. Reload to retry.</p>}
       <KnowledgeTabs link={link} current="Overview" showSources={Boolean(sources)} />
       <div className="our-g2">
-        <section className="card">
+        <section className="card our-stack">
           <div className="our-between"><h2>Published knowledge</h2>
             <Chip tone={client?.knowledgeVersion != null ? "g" : "r"}>{client?.knowledgeVersion != null ? "Version " + client.knowledgeVersion : "Not published"}</Chip></div>
-          <p>Every run uses the version that was published when it started, so later edits never change a run in progress.</p>
-          <p className="muted">{approved} approved record{approved === 1 ? "" : "s"}{waiting ? " · " + waiting + " waiting for review" : ""} · {uploads.length} source{uploads.length === 1 ? "" : "s"}</p>
-          {!readOnly && <div><Button primary disabled={!client || busy} onClick={() => submit("publishKnowledge")}>
-            Publish version {(client?.knowledgeVersion ?? 0) + 1}</Button></div>}
+          <p>Every run uses the version that was published when it started, so later changes never affect a run in progress.</p>
+          <p className="muted">{approved} approved file{approved === 1 ? "" : "s"} of {records.length}</p>
+          {!readOnly && waiting > 0 && <div className="our-alert warn our-between"><span>{waiting} file{waiting === 1 ? " is" : "s are"} waiting for review and won't be published until approved.</span>{recordsHref && <a className="btn" href={recordsHref}>Review</a>}</div>}
+          {!readOnly && <form className="our-stack our-line" onSubmit={(event) => {
+            event.preventDefault();
+            submit("publishKnowledge", { note: note.trim() }, () => setNote(""));
+          }}>
+            <label className="our-label">What changed in this version (optional)
+              <textarea value={note} maxLength={500} onChange={(event) => setNote(event.target.value)} placeholder="For example: updated claims.md with the December offers" /></label>
+            <div><Button primary type="submit" disabled={!client || busy || !approved}>Publish version {(client?.knowledgeVersion ?? 0) + 1}</Button></div>
+            {!approved && <p className="muted">Approve at least one file before publishing.</p>}
+          </form>}
         </section>
         <section className="card">
           <div className="our-between"><h2>Pre-run checks</h2>
@@ -56,19 +63,14 @@ function LiveKnowledgeOverview({ link, action, client, data, readOnly }) {
       <section className="card our-flush">
         <div className="our-pad"><h2>Version history</h2></div>
         <div className="admin-table"><table>
-          <thead><tr><th>Version</th><th>Published</th><th>Records</th></tr></thead>
+          <thead><tr><th>Version</th><th>Published</th><th>By</th><th>Files</th><th>Note</th></tr></thead>
           <tbody>
-            {versions.map((row) => <tr key={row.version + ":" + row.projectId}><td>v{row.version}</td><td>{asDate(row.publishedAt ?? row.createdAt)}</td><td>{row.recordRevisions?.length ?? "—"}</td></tr>)}
-            {!versions.length && <tr><td colSpan={3} className="muted">No versions yet.</td></tr>}
+            {versions.map((row) => <tr key={row.id ?? row.version}><td>v{row.version}</td><td>{asDate(row.publishedAt)}</td>
+              <td>{row.publishedBy ?? "—"}</td><td>{row.files ?? "—"}</td><td>{row.note ?? <span className="muted">—</span>}</td></tr>)}
+            {!versions.length && <tr><td colSpan={5} className="muted">No versions yet.</td></tr>}
           </tbody>
         </table></div>
       </section>
-      {recordsHref && <Card title="Due for review">
-        {due.length ? due.map((record) => (
-          <div key={record.id} className="our-between"><span>{record.title ?? record.id}</span><span className="muted">{asDate(record.reviewBy)}</span></div>
-        )) : <p className="muted">No records due within the next seven days.</p>}
-        <a href={recordsHref}>Open records</a>
-      </Card>}
     </Page>
   );
 }

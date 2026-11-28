@@ -15,6 +15,7 @@ const collections = [
   "agents",
   "audit",
   "notifications",
+  "knowledgeVersions",
 ];
 
 function emptyData() {
