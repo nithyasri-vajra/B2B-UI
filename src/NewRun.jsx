@@ -50,8 +50,14 @@ function LiveBrief({ brief, projectId, client, action }) {
     }
   }
 
+  const fileInput = useRef(null);
+  const [fileName, setFileName] = useState("");
+  const [editFields, setEditFields] = useState(false);
+  const complete = briefFields.every(([key]) => String(values[key] ?? "").trim());
+  const started = Boolean(brief || fileName || editFields) && (editFields || validation?.validated !== false);
+  const showInputs = editFields || (!complete && started);
   return (
-    <form className="admin-form" onSubmit={async (event) => {
+    <form className="our-stack" onSubmit={async (event) => {
       event.preventDefault();
       if (busy || checking || saved || validation?.validated === false || (brief && !revision)) return;
       setSaved(false);
@@ -64,27 +70,38 @@ function LiveBrief({ brief, projectId, client, action }) {
           fields: validation.fields, postCount: validation.postCount,
         } } : {}),
         ...(brief ? { briefId: brief.id, currentVersion: brief.currentVersion } : {}),
-      } }, () => setSaved(true));
+      } }, () => { setSaved(true); setEditFields(false); });
     }}>
-      <Field label="Upload period brief (.xlsx)">
-        <input type="file" accept=".xlsx" disabled={busy || checking} onChange={(event) => {
-          const file = event.currentTarget.files[0];
-          event.currentTarget.value = "";
-          upload(file);
-        }} />
-      </Field>
-      {checking && <p role="status">Checking brief.</p>}
-      {validation?.validated && <p role="status">Brief passed validation.</p>}
-      {validation?.issues.map(({ location, message }, index) => <p role="alert" key={index}>{location}: {message}</p>)}
-      {briefFields.map(([key, label]) => <Field key={key} label={label}>
+      <p className="muted">Upload the brief as an Excel (.xlsx) file made from the template. The details below fill in from the workbook.</p>
+      <input ref={fileInput} type="file" accept=".xlsx" hidden aria-label="Upload period brief (.xlsx)" disabled={busy || checking} onChange={(event) => {
+        const file = event.currentTarget.files[0];
+        event.currentTarget.value = "";
+        if (file) setFileName(file.name);
+        upload(file);
+      }} />
+      <div className="our-row">
+        <Button primary disabled={busy || checking} onClick={() => fileInput.current?.click()}>{brief || fileName ? "Replace brief" : "Choose brief"}</Button>
+        {checking && <span className="muted" role="status">Checking…</span>}
+        {fileName && !checking && <span>{fileName}</span>}
+        {!started && <Button onClick={() => setEditFields(true)}>Enter details by hand</Button>}
+      </div>
+      {validation?.validated && <div className="our-alert ok" role="status">All required fields are present and valid.</div>}
+      {validation && !validation.validated && <div className="our-alert bad" role="alert"><div><strong>Fix these in the workbook and upload it again:</strong>
+        {validation.issues.map(({ location, message }, index) => <p key={index}>{location}: {message}</p>)}</div></div>}
+      {!started ? null : showInputs ? briefFields.map(([key, label]) => <Field key={key} label={label}>
         <input required disabled={busy || checking} value={values[key]} onChange={(event) => {
           setSaved(false);
           if (validation?.validated) setValidation(null);
           setValues({ ...values, [key]: event.target.value });
         }} />
-      </Field>)}
-      <Button primary type="submit" disabled={busy || checking || saved || validation?.validated === false || Boolean(brief && !revision)}>Save brief</Button>
-      {saved && <p role="status">Brief saved.</p>}
+      </Field>) : <table className="our-summary"><tbody>
+        {briefFields.map(([key, label]) => <tr key={key}><td className="muted">{label}</td><td style={{ whiteSpace: "pre-wrap" }}>{values[key]}</td></tr>)}
+      </tbody></table>}
+      {started && <div className="our-row">
+        <Button primary type="submit" disabled={busy || checking || saved || validation?.validated === false || Boolean(brief && !revision)}>Save brief</Button>
+        {!showInputs && <Button disabled={busy || checking} onClick={() => { setEditFields(true); setSaved(false); }}>Edit details</Button>}
+      </div>}
+      {saved && <div className="our-alert ok" role="status">Brief saved. You can run the agent.</div>}
       {brief && !revision && <p role="alert">The current revision is unavailable. Reload the app before editing.</p>}
       {feedback}
     </form>
@@ -143,12 +160,12 @@ function LiveNewRun({ data, client, run, href, action, canAct }) {
   return (
     <Page className="new-run-screen" title={run ? "Run brief" : "New run"}
       description={(agents.find(({ agentKey: key }) => key === agentKey)?.name ?? "Agent") + " · attach the period brief, check it, and run."}>
-      <a href={href("runs")}>← Back to runs</a>
+      <p className="our-crumbs"><a href={href("runs")}>Runs</a></p>
       {data.workflowLoadError && <p role="alert">{data.workflowLoadError}</p>}
       <div className="new-run-layout">
-        <Card title="1 · Period brief">
-          <p><a href={periodBriefTemplate} download="period-brief-template.xlsx">Download brief template (.xlsx)</a>
-            <span className="muted"> · optional, if you don't have the template yet</span></p>
+        <section className="card admin-card">
+          <div className="our-between"><h2>1 · Period brief</h2>
+            <a className="btn" href={periodBriefTemplate} download="period-brief-template.xlsx">Download template</a></div>
           {projects.length > 1 || !projects.length ? (projects.length ? <Field label="Project">
             <select value={selected} disabled={Boolean(run || busy || progress)} onChange={(event) => { setSelected(event.target.value); setBriefId(""); }}>
               {projects.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
@@ -170,13 +187,20 @@ function LiveNewRun({ data, client, run, href, action, canAct }) {
               }} />
           </>}
           {selected && (run || !canAct("saveBrief")) && <p>{brief?.title ?? "Brief editing is unavailable for this view."}</p>}
-        </Card>
+        </section>
         <Card title="2 · Before you run">
-          {readiness && <p><Chip tone={blocked ? "a" : "g"}>{blocked ? "Knowledge readiness check needed" : "Knowledge ready" + (readiness.verdict === "LIMITED" ? " (limited)" : "")}</Chip></p>}
-          {blocked && <p>{readiness?.reason ?? "Complete the readiness check before running the agent."}{" "}
-            {href("readiness") && <a href={href("readiness")}>Open readiness</a>}</p>}
-          {readiness?.limitations?.map((item) => <p key={item} className="muted">{item}</p>)}
-          <p><Chip tone={revision?.validated ? "g" : "a"}>{revision?.validated ? "Brief validated and saved" : "Brief not saved yet"}</Chip></p>
+          <div className="our-stack">
+            <div className="our-between our-top"><div><p className="our-strong">Published knowledge</p>
+              <p className="muted">{client?.knowledgeVersion != null ? "Version " + client.knowledgeVersion : "Not published yet"}</p></div>
+              <Chip tone={client?.knowledgeVersion != null ? "g" : "r"}>{client?.knowledgeVersion != null ? "Pass" : "Needs action"}</Chip></div>
+            {readiness && <div className="our-between our-top"><div><p className="our-strong">Knowledge readiness</p>
+              {readiness.reason && <p className="muted">{readiness.reason}</p>}</div>
+              <Chip tone={blocked ? "r" : readiness.verdict === "LIMITED" ? "a" : "g"}>{readiness.verdict ?? (blocked ? "BLOCKED" : "READY")}</Chip></div>}
+            <div className="our-between our-top"><div><p className="our-strong">Period brief</p>
+              <p className="muted">{brief?.title ?? "Upload and save the brief"}</p></div>
+              <Chip tone={revision?.validated ? "g" : "a"}>{revision?.validated ? "Validated and saved" : "Not saved yet"}</Chip></div>
+          </div>
+          {blocked && href("knowledge") && <p><a href={href("knowledge")}>Open knowledge</a> to fix this first.</p>}
           {editing && <>
             {agents.length > 1 ? <Field label="Agent">
               <select value={agentKey} disabled={busy} onChange={(event) => setSelectedAgent(event.target.value)}>
