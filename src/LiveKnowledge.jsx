@@ -11,7 +11,7 @@ export function LiveSources({ data, client, action, link, readOnly }) {
   const canAddSource = client && (!readOnly || isPlatformAdmin(data.session));
   return <Page className="knowledge-readiness" title="Knowledge" description={client?.name}>
     <nav className="knowledge-readiness-tabs" aria-label="Knowledge sections">
-      <a {...link("Readiness.dc.html")}>Readiness</a>
+      <a {...link("Readiness.dc.html")}>Overview</a>
       <span aria-current="page">Sources</span>
       <a {...link("RecordReview.dc.html")}>Records</a>
     </nav>

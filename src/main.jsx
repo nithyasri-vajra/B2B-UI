@@ -306,7 +306,7 @@ export function B2BAgents({
             ? Boolean(targetRun && (platformAdmin || rolesForClient(session, client?.id).some((role) => ["approver", "operator"].includes(role))))
             : (!data.liveAccess || name === "saveBrief") && canPerformAction(session, client?.id, name, targetRun))}
         link={(file) => ({
-          href: clientHref(file === "RecordReview.dc.html" ? "records" : "setup"),
+          href: clientHref(file === "RecordReview.dc.html" ? "records" : file === "Readiness.dc.html" ? "knowledge" : "setup"),
         })}
         onPublished={() => navigate(requireSignIn ? landingTarget ?? "home" : "home", { client: client?.id })}
       /> : <p role="alert">You do not have access to this page for the selected client.</p>}

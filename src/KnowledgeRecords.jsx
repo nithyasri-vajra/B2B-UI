@@ -79,7 +79,7 @@ export function Records({ action, data, client, link, readOnly = false }) {
       }
     >
       <nav className="knowledge-readiness-tabs" aria-label="Knowledge sections">
-        {link && <a {...link("Readiness.dc.html")}>Readiness</a>}
+        {link && <a {...link("Readiness.dc.html")}>Overview</a>}
         {link && !readOnly && <a {...link("KnowledgeSetup.dc.html")}>Sources</a>}
         <span aria-current="page">Records</span>
       </nav>

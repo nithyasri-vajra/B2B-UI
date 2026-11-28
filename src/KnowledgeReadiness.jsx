@@ -1,7 +1,86 @@
 import { Button, Card, Chip, Page, Table, useAction } from "./AdminControls";
 import "./knowledge-readiness.css";
 
-export default function KnowledgeReadiness({ link, action, client, data, readOnly, onPublished }) {
+const verdictTone = { READY: "g", LIMITED: "a", BLOCKED: "r" };
+const shortDate = new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric" });
+const asDate = (value) => value && Number.isFinite(Date.parse(value)) ? shortDate.format(new Date(value)) : "—";
+
+// Live brands: our Knowledge overview. Verdicts are READY / LIMITED / BLOCKED from the backend; no 0-100 score.
+function LiveKnowledgeOverview({ link, action, client, data, readOnly }) {
+  const report = data.readiness.find((item) => item.clientId === client?.id);
+  const { submit, busy, feedback } = useAction(action);
+  const sources = link("KnowledgeSetup.dc.html").href;
+  const recordsHref = link("RecordReview.dc.html").href;
+  const records = (data.records ?? []).filter((record) => record.clientId === client?.id);
+  const approved = records.filter(({ state }) => /approved/i.test(state ?? "")).length;
+  const waiting = records.filter(({ state }) => /pending|draft|review/i.test(state ?? "")).length;
+  const uploads = (data.uploads ?? []).filter((row) => row.clientId === client?.id);
+  const versions = (data.projectKnowledgeVersions ?? []).filter((row) => row.clientId === client?.id)
+    .sort((a, b) => (b.version ?? 0) - (a.version ?? 0));
+  const agents = Object.entries(report?.perAgent ?? {});
+  const names = new Map((data.projects ?? []).filter(({ clientId }) => clientId === client?.id)
+    .flatMap(({ agents: list = [] }) => list.map(({ agentKey, name }) => [agentKey, name])));
+  const now = Date.now();
+  const due = records.filter((record) => Date.parse(record.reviewBy) <= now + 7 * 86400000)
+    .sort((a, b) => Date.parse(a.reviewBy) - Date.parse(b.reviewBy));
+  return (
+    <Page className="knowledge-readiness" title="Knowledge"
+      description={client ? "Approved brand knowledge for " + client.name + "." : "Select a brand to view its knowledge."}>
+      {feedback}
+      {data.brandKnowledgeLoadError && <p role="alert">Some knowledge data could not be loaded. Reload to retry.</p>}
+      <nav className="knowledge-readiness-tabs" aria-label="Knowledge sections">
+        <span aria-current="page">Overview</span>
+        {sources && <a href={sources}>Sources</a>}
+        {recordsHref && <a href={recordsHref}>Records</a>}
+      </nav>
+      <div className="our-g2">
+        <section className="card">
+          <div className="our-between"><h2>Published knowledge</h2>
+            <Chip tone={client?.knowledgeVersion != null ? "g" : "r"}>{client?.knowledgeVersion != null ? "Version " + client.knowledgeVersion : "Not published"}</Chip></div>
+          <p>Every run uses the version that was published when it started, so later edits never change a run in progress.</p>
+          <p className="muted">{approved} approved record{approved === 1 ? "" : "s"}{waiting ? " · " + waiting + " waiting for review" : ""} · {uploads.length} source{uploads.length === 1 ? "" : "s"}</p>
+          {!readOnly && <div><Button primary disabled={!client || busy} onClick={() => submit("publishKnowledge")}>
+            Publish version {(client?.knowledgeVersion ?? 0) + 1}</Button></div>}
+        </section>
+        <section className="card">
+          <div className="our-between"><h2>Pre-run checks</h2>
+            {report && <Chip tone={verdictTone[report.verdict]}>{report.verdict}</Chip>}</div>
+          {!report && <p className="muted">No readiness check yet.</p>}
+          {report?.reason && <p>{report.reason}</p>}
+          {agents.map(([key, value]) => (
+            <div key={key} className="our-between our-top our-line">
+              <div><p className="our-strong">{names.get(key) ?? key}</p>{value.reason && <p className="muted">{value.reason}</p>}</div>
+              <Chip tone={verdictTone[value.verdict]}>{value.verdict}</Chip>
+            </div>
+          ))}
+          <p className="muted">The agents give their own READY, LIMITED or BLOCKED verdict for each stage when a run starts.</p>
+        </section>
+      </div>
+      <section className="card our-flush">
+        <div className="our-pad"><h2>Version history</h2></div>
+        <div className="admin-table"><table>
+          <thead><tr><th>Version</th><th>Published</th><th>Records</th></tr></thead>
+          <tbody>
+            {versions.map((row) => <tr key={row.version + ":" + row.projectId}><td>v{row.version}</td><td>{asDate(row.publishedAt ?? row.createdAt)}</td><td>{row.recordRevisions?.length ?? "—"}</td></tr>)}
+            {!versions.length && <tr><td colSpan={3} className="muted">No versions yet.</td></tr>}
+          </tbody>
+        </table></div>
+      </section>
+      {recordsHref && <Card title="Due for review">
+        {due.length ? due.map((record) => (
+          <div key={record.id} className="our-between"><span>{record.title ?? record.id}</span><span className="muted">{asDate(record.reviewBy)}</span></div>
+        )) : <p className="muted">No records due within the next seven days.</p>}
+        <a href={recordsHref}>Open records</a>
+      </Card>}
+    </Page>
+  );
+}
+
+export default function KnowledgeReadiness(props) {
+  return props.data.liveAccess ? <LiveKnowledgeOverview {...props} /> : <PreviewKnowledgeReadiness {...props} />;
+}
+
+function PreviewKnowledgeReadiness({ link, action, client, data, readOnly, onPublished }) {
   const report = data.readiness.find((item) => item.clientId === client?.id);
   const { submit, busy, feedback } = useAction(action);
   const tone = { Green: "g", Amber: "a", Red: "r" }[report?.band];
