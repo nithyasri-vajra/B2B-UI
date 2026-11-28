@@ -7,6 +7,7 @@ import { Records } from "./KnowledgeRecords";
 import { Users } from "./UserAccess";
 import { AuditLog } from "./AuditLog";
 import "./admin.css";
+import { AppShell } from "./AppShell";
 import { createAdminStore } from "./adminData";
 
 const pagesByFile = {
@@ -52,6 +53,10 @@ export default function AdminApp({
   selectedClientId,
   scopedClients,
   onClientChange,
+  session,
+  brandsHref,
+  approvalsHref,
+  onSignOut,
   canOpen = () => true,
   readOnly = false,
   scopedAudit = false,
@@ -98,96 +103,12 @@ export default function AdminApp({
     return { href: hrefFor(file, target) };
   }
 
+  const shellHref = (target) => canOpen(target) ? hrefFor(null, target) : undefined;
   return (
-    <div className="b2b-admin">
-      <div className="app">
-        <nav className="side" aria-label="Main">
-          <div className="app-brand-label">
-            <span className="app-brand-mark" aria-hidden="true">▼</span>
-            <strong>B2B Agents</strong>
-          </div>
-          {[
-            ["Main.dc.html", "home", "Home"],
-            ["RunWorkspace.dc.html", "runs", "Runs"],
-            ["Readiness.dc.html", "readiness", "Knowledge"],
-            ...(onClientChange ? [["#approvals", "approvals", "Approvals"], ["#calendar", "calendar", "Content calendar"]] : []),
-            ["AdminOverview.dc.html", "overview", "Overview"],
-            ["#clients", "clients", "Clients"],
-            ["KnowledgeSetup.dc.html", "setup", "Knowledge setup"],
-            ["RecordReview.dc.html", "records", "Knowledge records"],
-            ["Users.dc.html", "users", "Users and roles"],
-            ["#access-requests", "requests", "Access requests"],
-            ["Agents.dc.html", "agents", "Agents and skills"],
-            ["#integrations", "integrations", "Integrations"],
-            ["AuditLog.dc.html", "audit", "Audit log"],
-          ].filter(([, target]) => canOpen(target)).map(([file, target, label]) => (
-            <Fragment key={file}>
-              {target === "overview" && <p className="sec">Admin</p>}
-              <a className={navClass(file)} {...link(file, target)}>{label}</a>
-            </Fragment>
-          ))}
-        </nav>
-        <div className="main">
-          <header className="top">
-            <div style={{ flexGrow: "1" }} />
-            <label className="muted" htmlFor={clientId}>
-              Client
-            </label>
-            <select
-              id={clientId}
-              value={client?.id ?? ""}
-              disabled={!clients.length}
-              onChange={(event) => (onClientChange ?? setSelection)(event.target.value)}
-            >
-              {!clients.length && <option value="">No clients</option>}
-              {clients.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="btn"
-              aria-expanded={showNotifications}
-              onClick={() => setShowNotifications((value) => !value)}
-            >
-              Notifications ·{" "}
-              {notifications.filter((item) => !item.read).length}
-            </button>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <div
-                className="ph"
-                style={{
-                  width: "32px",
-                  height: "32px",
-                  borderRadius: "50%",
-                  fontSize: "11px",
-                }}
-              >
-                {data.session?.name?.[0] ?? "—"}
-              </div>
-              <div>
-                <p style={{ fontSize: "13px", fontWeight: "600" }}>
-                  {data.session?.name ?? "No session"}
-                </p>
-                <p className="muted" style={{ fontSize: "12px" }}>
-                  {data.session?.role ?? "—"}
-                </p>
-              </div>
-            </div>
-            {profileHref && <a className="btn" href={profileHref}>My profile</a>}
-            {logout}
-          </header>
-          {showNotifications && (
-            <section className="card" aria-label="Notifications">
-              {notifications.length ? (
-                notifications.map((item) => <p key={item.id}>{item.message}</p>)
-              ) : (
-                <p>No notifications.</p>
-              )}
-            </section>
-          )}
+    <AppShell page={page} session={session ?? data.session} clients={clients} client={client}
+      onClientChange={onClientChange ?? setSelection} href={shellHref} platformHref={shellHref}
+      brandsHref={brandsHref} approvalsHref={approvalsHref ?? shellHref("approvals")}
+      profileHref={profileHref} onSignOut={onSignOut}>
           <Screen
             link={link}
             key={
@@ -211,8 +132,6 @@ export default function AdminApp({
               action("uploadSources", { files, domain })
             }
           />
-        </div>
-      </div>
-    </div>
+    </AppShell>
   );
 }

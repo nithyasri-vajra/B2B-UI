@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Button, Card, Field, Page, Table, Tabs, useAction } from "./AdminControls";
+import { Button, Card, Chip, Field, Page, Table, Tabs, useAction } from "./AdminControls";
 import { rolesForClient } from "./access";
 import { createAuthServices } from "./authServices";
+import { statusText } from "./labels";
 import "./review-screens.css";
 import "./approvals.css";
 
@@ -25,7 +26,7 @@ export function LiveApprovals({ data }) {
   return <Page className="approvals-queue-screen" title="My approvals" description="Reviews assigned to you across your brands.">
     {(loadError || (!latest && data.approvalsLoadError)) && <p role="alert">{loadError || data.approvalsLoadError}</p>}
     <Field label="Brand">
-      <select value={brand} onChange={(event) => setBrand(event.target.value)}>
+      <select className="our-narrow" value={brand} onChange={(event) => setBrand(event.target.value)}>
         <option value="">All brands</option>
         {data.clients.filter((item) => !item.archived).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
       </select>
@@ -45,7 +46,7 @@ export function LiveApprovals({ data }) {
         return { key: review._id, cells: [
           data.clients.find((item) => item.id === String(review.clientId))?.name ?? "Brand",
           (isPlan(review) ? run?.title : post?.title) ?? (isPlan(review) ? "Content plan" : "Output"),
-          review.requestedAt ? new Date(review.requestedAt).toLocaleString() : "-",
+          review.requestedAt ? reviewDate.format(new Date(review.requestedAt)) : "-",
           (run || !isPlan(review)) && <a className="btn" href={reviewHref} onClick={needsRefresh ? (event) => {
             event.preventDefault();
             window.location.hash = reviewHref;
@@ -89,13 +90,89 @@ function Decision({ review, action }) {
   </Card>;
 }
 
+const toLocalInput = (value) => {
+  const date = new Date(value);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+};
+
+// Post review (Gate 2): no reject. The reviewer reads the post and either describes
+// what should change and regenerates it (as often as needed), or approves it with a
+// publishing date, which puts it on the calendar and into the publishing pipeline.
+function PostFeedback({ post, run, review, mayFinalize, canRegenerate, action }) {
+  const [text, setText] = useState("");
+  const [schedule, setSchedule] = useState(review?.scheduledAt ? toLocalInput(review.scheduledAt) : "");
+  const [stepUp, setStepUp] = useState(false);
+  const regenerate = useAction(action);
+  const finalize = useAction(async (name, values) => {
+    try {
+      return await action(name, values);
+    } catch (error) {
+      if (error.code === "reauthentication_required") {
+        setStepUp(true);
+        throw new Error("Confirm your Google sign-in, then reopen the post and mark it as final.");
+      }
+      throw error;
+    }
+  });
+  const running = post.regeneration?.status === "running";
+  const history = (post.draftVersions ?? []).filter((entry) => entry.reviewerFeedback)
+    .sort((a, b) => b.version - a.version);
+  return <Card title="Feedback">
+    {running ? <p role="status">Regenerating the post with your feedback. The new version appears here when it is ready.</p> : <>
+      {post.regeneration?.status === "failed" && <p role="alert">The last regeneration did not finish: {post.regeneration.failureReason ?? "try again."}</p>}
+      {post.regeneration?.qaNote && post.regeneration.status === "completed" && !review &&
+        <p className="muted">Quality check note on the new version: {post.regeneration.qaNote}</p>}
+      {canRegenerate && <form className="admin-form" onSubmit={(event) => {
+        event.preventDefault();
+        regenerate.submit("regeneratePost", {
+          runId: run.id, postId: post.id, currentDraftVersionId: post.currentDraftVersionId, feedback: text.trim(),
+        }, () => setText(""));
+      }}>
+        <Field label="What should change?">
+          <textarea required maxLength={4000} rows={5} value={text} disabled={regenerate.busy}
+            placeholder="For example: make the opening line about the client's problem, cut the last paragraph and end with a question."
+            onChange={(event) => setText(event.target.value)} />
+        </Field>
+        <Button primary type="submit" disabled={regenerate.busy || !text.trim()}>
+          {regenerate.busy ? "Sending…" : "Regenerate"}
+        </Button>
+      </form>}
+      {regenerate.feedback}
+      {review && mayFinalize && (stepUp
+        ? <div className="admin-actions" style={{ marginTop: 16 }}>
+          <Button onClick={() => finalize.submit("signIn", { reauthenticate: true })} disabled={finalize.busy}>Confirm Google sign-in</Button>
+          {finalize.feedback}
+        </div>
+        : <form className="admin-form" style={{ marginTop: 16 }} onSubmit={(event) => {
+          event.preventDefault();
+          finalize.submit("decideReview", {
+            reviewId: review._id, projectId: String(review.projectId), decision: "approved", reason: "",
+            scheduledAt: new Date(schedule).toISOString(),
+          });
+        }}>
+          <Field label="Publish on (your local time)">
+            <input type="datetime-local" required value={schedule} min={toLocalInput(new Date())}
+              disabled={finalize.busy} onChange={(event) => setSchedule(event.target.value)} />
+          </Field>
+          <Button primary type="submit" disabled={finalize.busy || !schedule}>Approve and schedule</Button>
+          {finalize.feedback}
+        </form>)}
+    </>}
+    {history.length > 0 && <>
+      <p><strong>Earlier feedback</strong></p>
+      <ul>{history.map((entry) => <li key={String(entry._id ?? entry.id)}>
+        Version {entry.version - 1} → {entry.version}: {entry.reviewerFeedback}
+      </li>)}</ul>
+    </>}
+  </Card>;
+}
+
 export function LivePlan({ run, data, client, action, href }) {
   const [selected, setSelected] = useState([]);
-  const [askApprover, setAskApprover] = useState(false);
   const { submit, busy, feedback } = useAction(action);
   const plan = run?.planRevisions?.at(-1);
   const roles = rolesForClient(data.session, client?.id);
-  const operator = roles.includes("marketing_operator");
+  const operator = roles.includes("operator");
   const approver = roles.includes("approver");
   const review = !client?.archived && data.reviewDecisions?.find((entry) => isPlan(entry) && entry.status === "pending" &&
     String(entry.runId) === run?.id && entry.planVersion === plan?.version &&
@@ -107,11 +184,23 @@ export function LivePlan({ run, data, client, action, href }) {
       ["pending", "decided"].includes(entry.status));
   const ids = plan?.items?.map((item) => String(item.itemId)) ?? [];
   const selection = selected.filter((id) => ids.includes(id));
-  return <Page className="plan-review-screen" title="Approve content plan" description={run?.title ?? "Gate 1"}>
-    {run && <a href={href("runs", { run: run.id })}>Back to run</a>}
+  const items = plan?.items ?? [];
+  const pillars = Object.entries(items.reduce((counts, { pillar }) => pillar ? { ...counts, [pillar]: (counts[pillar] ?? 0) + 1 } : counts, {}))
+    .map(([name, count]) => name + " " + count).join(" · ");
+  const plannerReport = run?.planningResult?.planner?.report;
+  return <Page className="plan-review-screen" title="Approve content plan"
+    description={[run?.title, "Gate 1", plan && "Version " + plan.version, items.length + " posts planned"].filter(Boolean).join(" · ")}>
+    {run && <p className="our-crumbs"><a href={href("runs", { run: run.id })}>{run.title ?? "Back to run"}</a></p>}
     {feedback}
-    <Card title={plan ? "Plan version " + plan.version : "Content plan"}>
-      <Table headers={["Selected", "Topic", "Pillar", "Call to action"]} empty="No plan items are available."
+    <div className="our-g4">
+      <div className="card"><p className="muted">Posts</p><p className="our-kpi">{items.length}</p></div>
+      <div className="card"><p className="muted">Pillar mix</p><p className="our-strong">{pillars || "—"}</p></div>
+      <div className="card"><p className="muted">Planner verdict</p><p className="our-strong">{run?.planningResult?.planner?.verdict ?? "—"}</p></div>
+      <div className="card"><p className="muted">Review</p><p className="our-strong">{review ? "Waiting for your decision" : statusText(run?.status) ?? "—"}</p></div>
+    </div>
+    <Card title={plan ? "Calendar · version " + plan.version : "Content plan"}>
+      {mayRequest && !review && <p className="muted">Tick the posts to keep, then request the plan review.</p>}
+      <Table headers={["Keep", "Pillar", "Topic and angle", "Call to action"]} empty="No plan items are available."
         rows={(plan?.items ?? []).map((item) => {
           const id = String(item.itemId);
           const checked = (review ? review.selectedPlanItemIds?.map(String) ?? [] : selection).includes(id);
@@ -119,23 +208,38 @@ export function LivePlan({ run, data, client, action, href }) {
             <input type="checkbox" aria-label={"Select " + (item.title ?? item.topic ?? "plan item")} checked={checked}
               disabled={!mayRequest || Boolean(review)} onChange={() => setSelected((current) =>
                 checked ? current.filter((entry) => entry !== id) : [...current, id])} />,
-            item.title ?? item.topic ?? item.angle ?? id, item.pillar ?? "-", item.callToAction ?? "-",
+            item.pillar ?? "-",
+            <><p className="our-strong">{item.title ?? item.topic ?? id}</p>{item.angle && <p className="muted">{item.angle}</p>}</>,
+            item.callToAction ?? "-",
           ] };
         })} />
       {mayRequest && !review && ids.length > 0 && !["awaiting_plan_approval", "Awaiting plan approval"].includes(run.status) && <>
-        <label><input type="checkbox" checked={askApprover || !operator} disabled={!operator}
-          onChange={(event) => setAskApprover(event.target.checked)} /> {operator ? "Also ask the named approver" : "Ask the named approver"}</label>{" "}
+        {!operator && <p className="muted">The brand's named approver will review this plan.</p>}
         <Button primary disabled={busy || !selection.length} onClick={() => submit("requestPlanApproval", {
-          runId: run.id, planVersion: plan.version, selectedPlanItemIds: selection, askApprover: askApprover || !operator,
+          runId: run.id, planVersion: plan.version, selectedPlanItemIds: selection, askApprover: !operator,
         })}>Request plan review</Button>
       </>}
     </Card>
     {review && <Decision key={review._id} review={review} action={action} />}
+    {plannerReport && <Card title="Why the planner chose this"><p style={{ whiteSpace: "pre-wrap" }}>{plannerReport}</p></Card>}
   </Page>;
 }
 
+const reviewDate = new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
+
 export function LivePost({ post, run, data, action, href }) {
   const [draft, setDraft] = useState(null);
+  const regenerating = post?.regeneration?.status === "running";
+  // While a regeneration runs in the background, refresh the post every 10 seconds.
+  useEffect(() => {
+    if (!regenerating || !post?.projectId) return;
+    const timer = setInterval(() => {
+      action("loadPostDetail", { projectId: post.projectId, postId: post.id })
+        .then(() => action("refreshApprovals").catch(() => {}))
+        .catch(() => {});
+    }, 10_000);
+    return () => clearInterval(timer);
+  }, [regenerating, post?.projectId, post?.id, action]);
   const [destination, setDestination] = useState("");
   const [schedule, setSchedule] = useState("");
   const [sentReview, setSentReview] = useState(null);
@@ -174,9 +278,19 @@ export function LivePost({ post, run, data, action, href }) {
   const destinations = post?.gate2Destinations ?? [];
   const selectedDestination = destinations.includes(destination) ? destination : destinations[0] ?? "";
   const canEdit = post?.currentDraftVersionId && run && post.canEditDraft === true;
-  return <Page className="post-review-screen" title={post?.title ?? "Approve output"} description={post ? "Gate 2 · " + (post.status ?? "Draft") : "Select an output to review."}>
-    {href("approvals") && <a href={href("approvals")}>My approvals</a>}
+  const qa = currentDraft?.qaChecks?.at(-1);
+  const claims = currentDraft?.claims ?? [];
+  const words = String(post?.copy ?? "").split(/\s+/).filter(Boolean).length;
+  const scheduledFor = post?.scheduledAt && Number.isFinite(Date.parse(post.scheduledAt)) ? reviewDate.format(new Date(post.scheduledAt)) : null;
+  return <Page className="post-review-screen" title={post?.title ?? "Approve output"}
+    description={post ? ["Gate 2", post.displayStatus ?? post.status ?? "Draft", post.version != null && "Version " + post.version].filter(Boolean).join(" · ") : "Select an output to review."}>
+    <p className="our-crumbs">{href("approvals") && <a href={href("approvals")}>My approvals</a>}
+      {run && href("runs") && <> · <a href={href("runs", { run: run.id })}>{run.title ?? "Back to run"}</a></>}</p>
     {feedback}
+    {regenerating && <div className="our-alert info" role="status">The writer is regenerating this post with your feedback. This page refreshes by itself.</div>}
+    {post?.displayStatus === "Scheduled" && <div className="our-alert ok">Approved{post.approvedBy ? " by " + post.approvedBy : ""}. Publishes {scheduledFor}{post.destination ? " to " + (post.destination === "linkedin" ? "LinkedIn" : post.destination) : ""}.</div>}
+    {String(qa?.verdict).toUpperCase() === "BLOCKED" && <div className="our-alert bad">Quality check blocked this version: {qa.report}</div>}
+    <div className="our-g2">
     <Card title={post?.version != null ? "Preview · Version " + post.version : "Preview"}>
       {draft && canEdit ? <form className="admin-form" onSubmit={(event) => {
         event.preventDefault();
@@ -186,14 +300,31 @@ export function LivePost({ post, run, data, action, href }) {
         <Button primary type="submit" disabled={busy}>Save draft revision</Button>{" "}
         <Button onClick={() => setDraft(null)} disabled={busy}>Cancel</Button>
       </form> : <>
-        <p style={{ whiteSpace: "pre-wrap" }}>{post?.copy ?? "No draft text is available."}</p>
-        {canEdit && <Button disabled={request.busy} onClick={() => setDraft({ id: post.currentDraftVersionId, text: post.copy ?? "" })}>Edit draft</Button>}
+        <div className="our-post-preview">
+          <p className="muted">LinkedIn{scheduledFor ? " · " + scheduledFor : ""}</p>
+          <p style={{ whiteSpace: "pre-wrap" }}>{post?.copy ?? "No draft text is available."}</p>
+        </div>
+        {post?.copy && <p className="muted">{words} words</p>}
+        {canEdit && <div><Button disabled={request.busy} onClick={() => setDraft({ id: post.currentDraftVersionId, text: post.copy ?? "" })}>Edit text</Button></div>}
       </>}
     </Card>
+    <Card title="Quality check">
+      {qa ? <>
+        <div className="our-row"><Chip tone={{ PASS: "ok", READY: "ok", LIMITED: "warn", REVISE: "warn", BLOCKED: "bad", FAIL: "bad" }[String(qa.verdict).toUpperCase()]}>{qa.verdict}</Chip>
+          {currentDraft?.qaFixRounds > 0 && <span className="muted">after {currentDraft.qaFixRounds} automatic rewrite{currentDraft.qaFixRounds === 1 ? "" : "s"}</span>}</div>
+        {qa.report && <details><summary>Full quality report</summary><p style={{ whiteSpace: "pre-wrap" }}>{qa.report}</p></details>}
+      </> : <p className="muted">Quality check has not reviewed this version yet.</p>}
+      <h3>Claims · {claims.length}</h3>
+      {claims.length ? claims.map((claim, index) => (
+        <div key={index} className="our-between our-top"><span>“{claim.quote}”</span>
+          <Chip tone={claim.recordId ? "ok" : "bad"}>{claim.recordId ? "Evidence linked" : "No evidence"}</Chip></div>
+      )) : <p className="muted">No factual claims in this version.</p>}
+    </Card>
+    </div>
     {currentReview && <Card title="Gate 2 request">
       <p>Draft version {post.version} · {currentReview.status === "pending" ? "Awaiting approval" : currentReview.decision?.replace(/_/g, " ")}</p>
-      <p>Destination {currentReview.destination}</p>
-      <p>{currentReview.scheduledAt ? "Scheduled for " + new Date(currentReview.scheduledAt).toLocaleString() : "Unscheduled"}</p>
+      {currentReview.destination && <p>Destination {currentReview.destination === "linkedin" ? "LinkedIn" : currentReview.destination}</p>}
+      <p>{currentReview.scheduledAt ? "Scheduled for " + reviewDate.format(new Date(currentReview.scheduledAt)) : "No publishing time set yet"}</p>
     </Card>}
     {canEdit && !draft && !currentReview && qaPassed && !["approved", "failed", "completed", "cancelled"].includes(
       String(post.status).toLowerCase(),
@@ -213,7 +344,10 @@ export function LivePost({ post, run, data, action, href }) {
       </form>
     </Card>}
     {request.feedback}
-    {review && post.mayDecideGate2 && <Decision key={review._id} review={review} action={action} />}
+    {post && run && (canEdit || (review && post.mayDecideGate2)) &&
+      !["approved", "publishing", "published", "cancelled"].includes(String(post.status).toLowerCase()) &&
+      <PostFeedback key={String(post.currentDraftVersionId)} post={post} run={run} review={review}
+        mayFinalize={post.mayDecideGate2 === true} canRegenerate={canEdit && !draft} action={action} />}
     <p className="muted">Publishing and verification on LinkedIn are unavailable.</p>
   </Page>;
 }

@@ -25,7 +25,7 @@ export default function ApprovalsQueue({ data, client, href, action }) {
   const session = data.session;
   const brands = data.clients.filter(({ id, archived }) => !archived && (
     session?.status === "active" ? !isPlatformAdmin(session) &&
-      rolesForClient(session, id).some((role) => ["approver", "marketing_operator"].includes(role))
+      rolesForClient(session, id).some((role) => ["approver", "operator"].includes(role))
       : id === client?.id
   ));
   const brandNames = new Map(brands.map(({ id, name }) => [id, name]));

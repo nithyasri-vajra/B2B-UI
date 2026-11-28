@@ -7,8 +7,8 @@ const userStatuses = {
   deactivated: "Deactivated in IdP",
 };
 const clientRoles = {
-  knowledge_admin: "Knowledge Admin", approver: "Approver",
-  marketing_operator: "Marketing Operator", viewer: "Viewer",
+  brand_manager: "Brand Manager", approver: "Approver",
+  operator: "Operator", viewer: "Viewer",
 };
 const roleKeys = Object.fromEntries(
   Object.entries(clientRoles).map(([key, label]) => [label, key]),
@@ -40,6 +40,17 @@ function toBrand(brand) {
     language: brand.spelling ?? brand.language,
   };
 }
+
+// Live posts keep their raw status; these fields drive the calendar and outputs screens.
+const postView = (record) => {
+  const scheduledAt = record.publishing?.scheduledAt ?? record.scheduledAt ?? null;
+  const raw = String(record.status ?? "draft").toLowerCase();
+  const displayStatus = raw === "approved" ? (scheduledAt ? "Scheduled" : "Approved")
+    : raw === "published" ? "Live" : raw === "publishing" ? "Publishing" : raw === "cancelled" ? "Cancelled"
+    : raw === "awaiting approval" ? "Awaiting approval" : raw === "changes_requested" ? "Changes requested" : "Draft";
+  return { scheduledAt, displayStatus, destination: record.publishing?.destination ?? record.destination,
+    liveUrl: record.publishing?.url ?? record.liveUrl, approvedBy: record.approvedByName ?? record.approvedBy };
+};
 
 const pathId = (value) => encodeURIComponent(String(value));
 const brandPath = (id) => "/workflow/brands/" + pathId(id);
@@ -168,7 +179,7 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
         projects: [{ ...project, id: projectId, clientId }],
         briefs: briefs.briefs.map(scoped),
         runs: runs.runs.map((record) => ({ ...scoped(record), briefId: record.briefId == null ? undefined : String(record.briefId) })),
-        posts: posts.contentItems.map((record) => ({ ...scoped(record), runId: record.runId == null ? undefined : String(record.runId) })),
+        posts: posts.contentItems.map((record) => ({ ...scoped(record), ...postView(record), runId: record.runId == null ? undefined : String(record.runId) })),
       };
     }));
     return Object.fromEntries(["projects", "briefs", "runs", "posts"].map((key) => [key, batches.flatMap((batch) => batch[key])]));
@@ -213,20 +224,44 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
       const { brand } = await call(brandPath(clientId), update, "PATCH");
       return { data: { clients: [toBrand(brand)] } };
     },
+    // Platform Admin: agents, their pipelines and whether each skill is configured on the server.
+    async loadAgents() {
+      return call("/workflow/agents");
+    },
+    async loadJobs({ status } = {}) {
+      return call("/workflow/admin/jobs" + (status ? "?status=" + encodeURIComponent(status) : ""));
+    },
+    // Brand settings and people for Brand Managers (and Platform Admins) of one brand.
+    async loadBrandSettings({ clientId }) {
+      const [{ brand }, { members }] = await Promise.all([
+        call(brandPath(clientId)), call(brandPath(clientId) + "/members"),
+      ]);
+      return { brand: toBrand(brand), members };
+    },
+    async saveBrandDetails({ clientId, values }) {
+      const { brand } = await call(brandPath(clientId), values, "PATCH");
+      return { brand: toBrand(brand), message: "Brand settings saved." };
+    },
+    async saveBrandMember({ clientId, email, roles }) {
+      const { member } = await call(brandPath(clientId) + "/members", { email, roles }, "PUT");
+      return { member, message: roles.length ? "Access saved for " + email + "." : email + " was removed from this brand." };
+    },
     async archiveClient({ clientId }) {
       const { brand } = await call(brandPath(clientId), { status: "archived" }, "PATCH");
       return { data: { clients: [toBrand(brand)] } };
     },
     async readBrandKnowledge(clientId, { sources, records }) {
       const base = brandPath(clientId) + "/knowledge";
-      const [report, uploads, entries] = await Promise.allSettled([
+      const [report, uploads, entries, history] = await Promise.allSettled([
         call(base + "/readiness"), sources && call(base + "/sources"), records && call(base + "/records"),
+        call(base + "/versions"),
       ]);
       return {
         readiness: report.value?.readiness ? [{ ...report.value.readiness, clientId }] : [],
         version: report.value?.version,
         uploads: (uploads.value?.knowledgeSources ?? []).map((row) => sourceRow(row, clientId)),
         records: (entries.value?.knowledgeRecords ?? []).map((row) => knowledgeRow(row, clientId)),
+        knowledgeVersions: (history.value?.knowledgeVersions ?? []).map((row) => ({ ...row, clientId })),
         failed: [report, uploads, entries].some(({ status }) => status === "rejected"),
       };
     },
@@ -243,9 +278,9 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
         const form = new FormData();
         form.append("file", file);
         for (const area of areas) form.append("areas", area);
-        const { source, record } = await call(brandPath(clientId) + "/knowledge/sources/upload", form);
+        const { source, record, revised } = await call(brandPath(clientId) + "/knowledge/sources/upload", form);
         const upload = sourceRow(source, clientId);
-        return { message: "File uploaded. Processing status: " + (upload.status ?? "Unknown") + ".",
+        return { message: revised ? name + " uploaded as revision " + record.currentRevision + "." : name + " uploaded.",
           data: { uploads: [upload], ...(record ? { records: [knowledgeRow(record, clientId)] } : {}) } };
       }
       const { source } = await call(brandPath(clientId) + "/knowledge/sources", { title, url, areas, sourceType: "link" });
@@ -255,14 +290,21 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
       const { record } = await call(brandPath(clientId) + "/knowledge/records", { sourceId, area, recordType, statement });
       return { data: { records: [knowledgeRow(record, clientId)] } };
     },
-    async reviseKnowledgeRecord({ clientId, id, currentRevision, reviewStatus, statement, evidenceGrade }) {
+    async reviseKnowledgeRecord({ clientId, id, currentRevision, reviewStatus, statement, evidenceGrade, reviewDueAt }) {
       const { record } = await call(brandPath(clientId) + "/knowledge/records/" + pathId(id) + "/revisions",
-        { currentRevision, reviewStatus, statement, evidenceGrade });
+        { currentRevision, reviewStatus, statement, evidenceGrade, ...(reviewDueAt ? { reviewDueAt } : {}) });
       return { data: { records: [knowledgeRow(record, clientId)] } };
     },
-    async publishKnowledge({ clientId }) {
-      const { knowledgeVersion } = await call(brandPath(clientId) + "/knowledge/versions", {});
-      return { message: "Knowledge version published.", data: { clients: [{ id: clientId, knowledgeVersion: knowledgeVersion.version }] } };
+    async publishKnowledge({ clientId, note }) {
+      const { knowledgeVersion } = await call(brandPath(clientId) + "/knowledge/versions", note ? { note } : {});
+      const [{ knowledgeVersions = [] }, report] = await Promise.all([
+        call(brandPath(clientId) + "/knowledge/versions").catch(() => ({})),
+        call(brandPath(clientId) + "/knowledge/readiness").catch(() => null),
+      ]);
+      return { message: "Version " + knowledgeVersion.version + " published.", data: {
+        clients: [{ id: clientId, knowledgeVersion: knowledgeVersion.version }],
+        knowledgeVersions: knowledgeVersions.map((row) => ({ ...row, clientId })),
+        ...(report?.readiness ? { readiness: [{ ...report.readiness, clientId }] } : {}) } };
     },
     async loadApprovals() {
       const { reviewDecisions } = await call("/workflow/approvals");
@@ -284,13 +326,20 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
         { planVersion, selectedPlanItemIds, askApprover });
       return services.loadRunDetail({ projectId, runId });
     },
-    async decideReview({ projectId, reviewId, decision, reason }) {
-      await call(projectPath(projectId) + "/reviews/" + pathId(reviewId) + "/decision", { decision, reason });
+    async decideReview({ projectId, reviewId, decision, reason, scheduledAt }) {
+      await call(projectPath(projectId) + "/reviews/" + pathId(reviewId) + "/decision",
+        { decision, reason, ...(scheduledAt ? { scheduledAt } : {}) });
       return { message: "Decision saved." };
     },
     async savePostDraft({ projectId, postId, currentDraftVersionId, text }) {
       await call(projectPath(projectId) + "/posts/" + pathId(postId) + "/drafts", { currentDraftVersionId, text });
       return services.loadPostDetail({ projectId, postId });
+    },
+    // Reviewer feedback in plain language: the backend regenerates the post in the background.
+    async regeneratePost({ projectId, postId, currentDraftVersionId, feedback }) {
+      await call(projectPath(projectId) + "/posts/" + pathId(postId) + "/regenerate", { currentDraftVersionId, feedback });
+      const detail = await services.loadPostDetail({ projectId, postId });
+      return { ...detail, message: "Regenerating the post with your feedback. This usually takes a few minutes." };
     },
     async loadKnowledgeVersions({ projectId }) {
       const { knowledgeVersions } = await call("/workflow/projects/" + pathId(projectId) + "/knowledge");
@@ -304,7 +353,7 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
     async loadPostDetail({ projectId, postId }) {
       const { record, draftVersions, reviewDecisions } = await call("/workflow/projects/" + pathId(projectId) + "/posts/" + pathId(postId));
       const current = draftVersions.find((draft) => String(draft.id ?? draft._id) === String(record.currentDraftVersionId));
-      return { data: { posts: [{ ...record, id: postId, clientId: String(record.clientId), projectId,
+      return { data: { posts: [{ ...record, ...postView(record), id: postId, clientId: String(record.clientId), projectId,
         runId: String(record.runId), draftVersions, reviewDecisions, copy: current?.text ?? record.copy,
         version: current?.version ?? record.version }] } };
     },

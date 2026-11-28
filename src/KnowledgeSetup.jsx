@@ -141,7 +141,7 @@ function PreviewKnowledgeSetup({
       }
     >
       <nav className="knowledge-readiness-tabs" aria-label="Knowledge sections">
-        <a {...link("Readiness.dc.html")}>Readiness</a>
+        <a {...link("Readiness.dc.html")}>Overview</a>
         <span aria-current="page">Sources</span>
         <a {...link("RecordReview.dc.html")}>Records</a>
       </nav>

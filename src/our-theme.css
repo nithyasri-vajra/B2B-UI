@@ -1,0 +1,203 @@
+/* Our app's visual language (approved wireframes, Final screens v2), layered over the
+   devs' styles. Loaded last. Only look and spacing change here, never behaviour. */
+:root {
+  --ink: #1E2A25; --ink-strong: #14231D; --muted: #6A665E; --line: #E4DDCF; --line-soft: #F0EBE1;
+  --bg: #F5F0E8; --brand: #1B4D3E; --brand-dark: #143B2F; --brand-soft: #E8F0EC; --gold: #7A6220;
+  --ok-bg: #E3F1EA; --ok: #1F6B47; --warn-bg: #FBF1DC; --warn: #7A4E00; --bad-bg: #FBE7E5; --bad: #9B2C22;
+  --info-bg: #E6EEFB; --info: #1F4C99;
+  --app-green: #1B4D3E; --app-border: #E4DDCF; --app-canvas: #F5F0E8; --app-ink: #1E2A25; --app-muted: #6A665E;
+}
+.b2b-admin { font-family: Barlow, system-ui, sans-serif; font-size: 15px; color: var(--ink); background: var(--bg); }
+.b2b-admin h1, .b2b-admin h2, .b2b-admin h3 { font-family: Montserrat, system-ui, sans-serif; color: var(--ink-strong); letter-spacing: 0; }
+.b2b-admin h1 { font-size: 24px; font-weight: 700; }
+.b2b-admin h2 { font-size: 17px; font-weight: 600; }
+.b2b-admin h3 { font-size: 14px; font-weight: 600; }
+.b2b-admin a { color: var(--brand); }
+.b2b-admin .muted { color: var(--muted); font-size: 14px; }
+
+/* Page body and header */
+.b2b-admin main.body { padding: 28px 32px 48px; display: flex; flex-direction: column; gap: 20px; max-width: 1400px; width: 100%; box-sizing: border-box; }
+.b2b-admin main.body > .admin-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.b2b-admin main.body > .admin-row h1 + p { margin-top: 4px; font-size: 15px; }
+
+/* Cards */
+.b2b-admin .card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 20px; box-shadow: none; display: flex; flex-direction: column; gap: 12px; box-sizing: border-box; }
+.b2b-admin .card > h2:first-child { margin-bottom: 2px; }
+
+/* Chips: devs' tones g / a / r / b map to ok / warn / bad / info */
+.b2b-admin .chip { font-size: 13px; padding: 2px 10px; border: 0; border-radius: 999px; background: #EEEBE4; color: #4A4740; font-weight: 500; }
+.b2b-admin .chip.g, .b2b-admin .chip.ok { background: var(--ok-bg); color: var(--ok); }
+.b2b-admin .chip.a, .b2b-admin .chip.warn { background: var(--warn-bg); color: var(--warn); }
+.b2b-admin .chip.r, .b2b-admin .chip.bad { background: var(--bad-bg); color: var(--bad); }
+.b2b-admin .chip.b, .b2b-admin .chip.info { background: var(--info-bg); color: var(--info); }
+
+/* Buttons */
+.b2b-admin .btn { min-height: 40px; padding: 0 16px; border-radius: 8px; border: 1px solid #D6CEBE; background: #fff; font-size: 14px; font-weight: 600; color: var(--ink); gap: 8px; white-space: nowrap; }
+.b2b-admin .btn:hover:not(:disabled) { border-color: #B8AE9A; }
+.b2b-admin .btn.pri { background: var(--brand); border-color: var(--brand); color: #fff; }
+.b2b-admin .btn.pri:hover:not(:disabled) { background: var(--brand-dark); }
+.b2b-admin .btn:disabled { opacity: .55; cursor: not-allowed; }
+
+/* Tables */
+.b2b-admin .admin-table { overflow-x: auto; }
+.b2b-admin table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.b2b-admin th { text-align: left; color: var(--muted); font-weight: 600; font-size: 13px; padding: 10px 14px; border-bottom: 1px solid var(--line); white-space: nowrap; background: none; }
+.b2b-admin td { padding: 12px 14px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+.b2b-admin tr:last-child td { border-bottom: 0; }
+
+/* Tabs */
+.b2b-admin .admin-tabs { display: flex; gap: 24px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.b2b-admin .tab { padding: 10px 2px; font-size: 15px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.b2b-admin .tab.tabon, .b2b-admin .tab[aria-pressed="true"] { color: var(--brand); border-bottom-color: var(--brand); font-weight: 600; }
+
+/* Forms */
+.b2b-admin .admin-field { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; color: #3B4A43; }
+.b2b-admin input[type=text], .b2b-admin input[type=email], .b2b-admin input[type=search], .b2b-admin input[type=date],
+.b2b-admin input[type=datetime-local], .b2b-admin input[type=number], .b2b-admin input:not([type]), .b2b-admin select, .b2b-admin textarea {
+  font: inherit; font-size: 14px; font-weight: 400; min-height: 40px; padding: 0 12px; border: 1px solid #D6CEBE; border-radius: 8px; background: #fff; color: var(--ink); box-sizing: border-box;
+}
+.b2b-admin textarea { padding: 10px 12px; min-height: 96px; resize: vertical; }
+.b2b-admin input:focus, .b2b-admin select:focus, .b2b-admin textarea:focus, .b2b-admin .btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+
+/* Shell to match: Barlow nav text */
+.app-shell .shell-nav, .app-shell .shell-switch span { font-family: Barlow, system-ui, sans-serif; }
+
+@media (max-width: 760px) {
+  .b2b-admin main.body { padding: 20px 16px 40px; }
+}
+
+/* Layout helpers used by the rebuilt screens */
+.b2b-admin .our-between { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.b2b-admin .our-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.b2b-admin .our-stack { display: flex; flex-direction: column; gap: 10px; }
+.b2b-admin .our-top { align-items: flex-start; flex-wrap: nowrap; }
+.b2b-admin .our-g2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
+.b2b-admin .our-strong { font-weight: 600; color: var(--ink-strong); margin: 0; font-size: 14px; }
+.b2b-admin .our-home p { margin: 0; }
+.b2b-admin .our-line { padding-top: 10px; border-top: 1px solid var(--line-soft); }
+.b2b-admin .card.our-flush { padding: 0; gap: 0; }
+.b2b-admin .our-pad { padding: 16px 20px; }
+.b2b-admin .our-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--brand); color: #fff; display: grid; place-items: center; font-weight: 600; font-size: 13px; flex: none; }
+.b2b-admin main.our-home { padding: 28px 32px 48px; display: flex; flex-direction: column; gap: 20px; max-width: 1400px; width: 100%; box-sizing: border-box; }
+.b2b-admin .our-home .brand-home-mark { width: 48px; height: 48px; border-radius: 12px; font-size: 17px; }
+@media (max-width: 860px) { .b2b-admin .our-g2 { grid-template-columns: 1fr; } .b2b-admin main.our-home { padding: 20px 16px 40px; } }
+
+/* Run detail: step strip, alerts, stacked columns */
+.b2b-admin .our-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.b2b-admin .our-step { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: #FBF9F5; }
+.b2b-admin .our-step p { margin: 0; text-transform: none; }
+.b2b-admin .our-step .muted { font-size: 13px; }
+.b2b-admin .our-step .muted::first-letter { text-transform: uppercase; }
+.b2b-admin .our-step.completed { border-color: #BFD8C8; background: var(--ok-bg); }
+.b2b-admin .our-step.running, .b2b-admin .our-step.waiting { border-color: #E5C98A; background: var(--warn-bg); }
+.b2b-admin .our-step.failed, .b2b-admin .our-step.blocked { border-color: #E8B4AC; background: var(--bad-bg); }
+.b2b-admin .our-alert { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; border-radius: 10px; padding: 14px 16px; border: 1px solid var(--line); background: #fff; }
+.b2b-admin .our-alert p { margin: 4px 0 0; }
+.b2b-admin .our-alert.bad { background: var(--bad-bg); border-color: #E8B4AC; }
+.b2b-admin .our-alert.warn { background: var(--warn-bg); border-color: #E5C98A; }
+.b2b-admin .our-alert.info { background: var(--info-bg); border-color: #BCD0E6; }
+.b2b-admin .run-detail-screen .workflow-columns { display: flex; flex-direction: column; gap: 20px; }
+.b2b-admin .run-detail-screen .workflow-columns > * { flex: none; width: 100%; box-sizing: border-box; }
+
+/* Review screens */
+.b2b-admin .our-crumbs { margin: 0; font-size: 14px; color: var(--muted); }
+.b2b-admin .our-alert.ok { background: var(--ok-bg); border-color: #BFD8C8; }
+.b2b-admin .our-post-preview { border: 1px solid var(--line); border-radius: 10px; padding: 16px; background: #fff; line-height: 1.5; }
+.b2b-admin .our-post-preview p { margin: 0 0 10px; }
+.b2b-admin .our-post-preview p:last-child { margin: 0; }
+.b2b-admin details summary { cursor: pointer; color: var(--brand); font-size: 14px; }
+.b2b-admin .post-review-screen .card h3 { margin: 6px 0 0; }
+.b2b-admin .our-g4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.b2b-admin .our-g4 .card p { margin: 0; }
+.b2b-admin .our-kpi { font-family: Montserrat, system-ui, sans-serif; font-size: 26px; font-weight: 700; color: var(--ink-strong); }
+.b2b-admin td p { margin: 0; }
+@media (max-width: 860px) { .b2b-admin .our-g4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* My brands inside the shared shell: our card styling for the devs' stats and brand cards */
+.b2b-admin .my-brands-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.b2b-admin .my-brands-heading > div { flex: 1 1 240px; }
+.b2b-admin .my-brands-heading input[type=search] { width: 240px; }
+.b2b-admin .my-brands-stats > div, .b2b-admin .my-brand-card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
+.b2b-admin .my-brands-stats strong { font-family: Montserrat, system-ui, sans-serif; font-size: 26px; }
+.b2b-admin .my-brands-stats span, .b2b-admin .my-brands-stats small { font-size: 14px; color: var(--muted); }
+.b2b-admin .my-brand-card h2 { font-size: 17px; }
+.b2b-admin .my-brand-card dt { font-size: 13px; color: var(--muted); }
+.b2b-admin .my-brand-card dd { font-size: 15px; font-weight: 600; }
+.b2b-admin .my-brand-card footer { font-size: 14px; }
+.b2b-admin select.our-narrow { max-width: 320px; }
+
+/* Our tabs and dialogs */
+.b2b-admin .our-tabs { display: flex; gap: 24px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.b2b-admin .our-tab { padding: 10px 2px; font-size: 15px; color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.b2b-admin .our-tab.on { background: none; border-radius: 0; color: var(--brand); border-bottom-color: var(--brand); font-weight: 600; }
+.our-dialog { border: 1px solid var(--line); border-radius: 12px; padding: 24px; width: min(560px, calc(100vw - 32px)); box-sizing: border-box; font-family: Barlow, system-ui, sans-serif; color: var(--ink); }
+.our-dialog::backdrop { background: rgba(20, 35, 29, .35); }
+.our-dialog h2 { font-family: Montserrat, system-ui, sans-serif; font-size: 17px; margin: 0; }
+.our-dialog .our-stack { margin-top: 16px; }
+.our-dialog-actions { margin-top: 20px; justify-content: flex-end; }
+.our-dialog label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; color: #3B4A43; }
+.our-dialog input, .our-dialog select, .our-dialog textarea { min-height: 40px; border: 1px solid #D6CEBE; border-radius: 8px; padding: 0 12px; font: inherit; font-weight: 400; background: #fff; }
+.our-dialog textarea { padding: 10px 12px; min-height: 110px; }
+.our-dialog input[type=file] { padding: 8px 12px; }
+.b2b-admin .our-toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--line-soft); }
+.b2b-admin .our-toolbar input[type=search] { flex: 1 1 220px; }
+.b2b-admin .our-toolbar select { width: auto; }
+.b2b-admin .our-toolbar label { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+.b2b-admin .our-flush td:first-child, .b2b-admin .our-flush th:first-child { padding-left: 20px; }
+.b2b-admin .our-flush td:last-child, .b2b-admin .our-flush th:last-child { padding-right: 20px; }
+.b2b-admin .our-right { text-align: right; }
+.b2b-admin table.our-summary td { padding: 8px 0; border-bottom: 1px solid var(--line-soft); } .b2b-admin table.our-summary td.muted { width: 140px; padding-right: 12px; }
+.b2b-admin button.our-tab-button { background: none; border: 0; border-bottom: 2px solid transparent; cursor: pointer; font: inherit; }
+.b2b-admin button.our-tab-button.on { border-bottom-color: var(--brand); }
+.b2b-admin .person-access-form { display: flex; flex-direction: column; gap: 20px; max-width: none; }
+.b2b-admin .person-access-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
+.b2b-admin .person-access-form > .card { width: 100%; box-sizing: border-box; }
+@media (max-width: 860px) { .b2b-admin .person-access-controls { grid-template-columns: 1fr; } }
+
+/* Knowledge record page: document on the left, review and details on the right. */
+.b2b-admin .our-record { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
+@media (max-width: 1100px) { .b2b-admin .our-record { grid-template-columns: 1fr; } }
+.b2b-admin .our-record aside h2 { margin: 0; }
+.b2b-admin .our-doc-card { padding: 0; }
+.b2b-admin .our-doc-head { padding: 14px 24px; border-bottom: 1px solid var(--line-soft); flex-wrap: wrap; gap: 10px; position: sticky; top: 0; background: #fff; border-radius: 12px 12px 0 0; z-index: 1; }
+.b2b-admin .our-doc-head select { width: auto; }
+.b2b-admin .our-doc { padding: 8px 32px 28px; font-size: 15px; line-height: 1.65; color: var(--ink); overflow-wrap: anywhere; }
+.b2b-admin .our-doc h2, .b2b-admin .our-doc h3, .b2b-admin .our-doc h4, .b2b-admin .our-doc h5, .b2b-admin .our-doc h6 { font-family: Montserrat, system-ui, sans-serif; margin: 26px 0 8px; line-height: 1.3; }
+.b2b-admin .our-doc h2 { font-size: 21px; } .b2b-admin .our-doc h3 { font-size: 17px; padding-top: 14px; border-top: 1px solid var(--line-soft); } .b2b-admin .our-doc h4 { font-size: 15px; }
+.b2b-admin .our-doc p { margin: 0 0 12px; }
+.b2b-admin .our-doc ul, .b2b-admin .our-doc ol { margin: 0 0 14px; padding-left: 22px; }
+.b2b-admin .our-doc li { margin: 4px 0; }
+.b2b-admin .our-doc blockquote { margin: 0 0 14px; padding: 10px 16px; border-left: 3px solid #C9A227; background: #FBF7EC; border-radius: 0 8px 8px 0; color: #4A5650; }
+.b2b-admin .our-doc code { background: #F1ECE1; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+.b2b-admin .our-doc hr { border: 0; border-top: 1px solid var(--line); margin: 20px 0; }
+.b2b-admin .our-doc-table { overflow-x: auto; margin: 0 0 16px; border: 1px solid var(--line-soft); border-radius: 8px; }
+.b2b-admin .our-doc-table table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.b2b-admin .our-doc-table th, .b2b-admin .our-doc-table td { padding: 8px 12px; border-bottom: 1px solid var(--line-soft); text-align: left; vertical-align: top; }
+.b2b-admin .our-doc-table th { background: #F7F3EA; font-weight: 600; }
+.b2b-admin .our-doc-edit { padding: 20px 24px; }
+.b2b-admin .our-doc-edit textarea { min-height: 60vh; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; line-height: 1.55; padding: 14px; border: 1px solid #D6CEBE; border-radius: 8px; width: 100%; box-sizing: border-box; }
+.b2b-admin .our-record aside label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; color: #3B4A43; }
+.b2b-admin .our-record aside .our-row select { flex: 1; }
+.b2b-admin .our-revlist { list-style: none; margin: 0; padding: 0 0 8px; }
+.b2b-admin .our-revlist li { padding: 8px 20px; border-top: 1px solid var(--line-soft); }
+.b2b-admin .our-revlist li.on { background: #F2F6F3; }
+.b2b-admin .our-revlist li p { margin: 2px 0 0; font-size: 13px; }
+.b2b-admin .our-revlist button { display: flex; justify-content: space-between; align-items: center; width: 100%; background: none; border: 0; padding: 0; font: inherit; font-weight: 600; cursor: pointer; color: inherit; }
+.b2b-admin button.our-linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--brand); text-decoration: underline; cursor: pointer; }
+.b2b-admin .our-record-page .our-alert { margin: 0; }
+.b2b-admin .our-record aside { position: sticky; top: 16px; }
+.b2b-admin label.our-label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; color: #3B4A43; }
+.b2b-admin label.our-label textarea { min-height: 72px; border: 1px solid #D6CEBE; border-radius: 8px; padding: 10px 12px; font: inherit; font-weight: 400; }
+.our-dialog label.our-file-pick { display: flex; align-items: center; justify-content: center; min-height: 72px; border: 1.5px dashed #C9BFA9; border-radius: 10px; background: #FBF8F2; cursor: pointer; font-weight: 600; color: var(--brand, #1B4D3E); }
+.our-dialog label.our-file-pick input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.our-dialog { width: min(680px, calc(100vw - 32px)); }
+.our-upload-list { width: 100%; border-collapse: collapse; }
+.our-upload-list td { padding: 10px 8px; border-top: 1px solid #F0EBE1; vertical-align: middle; }
+.our-upload-list td p { margin: 0; }
+.our-upload-list input { width: 160px; }
+.our-error { color: #A23B2A; margin: 4px 0 0; }
+.b2b-admin .our-csv td { white-space: pre-wrap; min-width: 90px; }
+.b2b-admin .our-doc-table.our-csv { max-height: 70vh; overflow: auto; }
+.b2b-admin .our-csv th { position: sticky; top: 0; z-index: 1; }
+.b2b-admin .our-csv td { max-width: 420px; }
+.b2b-admin .our-csv td > div { max-height: 7.5em; overflow: auto; }

@@ -1,17 +1,17 @@
 const clientPages = {
-  knowledge_admin: ["home", "runs", "plan", "post", "calendar", "setup", "records", "knowledge", "readiness", "audit"],
+  brand_manager: ["home", "runs", "plan", "post", "calendar", "setup", "records", "knowledge", "readiness", "audit", "brand-settings"],
   approver: ["home", "new-run", "runs", "approvals", "plan", "post", "calendar", "records", "knowledge", "readiness"],
-  marketing_operator: ["home", "new-run", "runs", "approvals", "plan", "post", "calendar", "records", "knowledge", "readiness"],
-  viewer: ["home", "runs", "plan", "post", "calendar", "knowledge", "readiness"],
+  operator: ["home", "new-run", "runs", "approvals", "plan", "post", "calendar", "records", "knowledge", "readiness"],
+  viewer: ["home", "runs", "plan", "post", "calendar", "records", "knowledge", "readiness", "audit"],
 };
 
 const platformPages = [
-  "overview", "clients", "new-client", "client-settings", "users", "requests", "agents", "integrations", "audit",
+  "overview", "clients", "new-client", "client-settings", "users", "requests", "agents", "integrations", "audit", "jobs",
 ];
 
 const platformActions = [
   "loadClients", "createClient", "saveClientSettings", "archiveClient", "reconnectClientLinkedIn",
-  "loadUsers", "saveUserAccess", "preAddUser", "suspendUser", "removeUserFromClient",
+  "loadUsers", "loadAgents", "saveUserAccess", "preAddUser", "suspendUser", "removeUserFromClient",
   "declineAccessRequest", "enableAgentVersion", "saveAgentLimits", "testLinkedInConnection", "revokeLinkedInTestProfile",
 ];
 const knowledgeActions = [
@@ -60,9 +60,9 @@ export function canOpenPage(session, clientId, page) {
 export function landingPage(session, clientId) {
   if (isPlatformAdmin(session)) return "overview";
   const roles = rolesForClient(session, clientId);
-  if (roles.includes("knowledge_admin")) return "readiness";
+  if (roles.includes("brand_manager")) return "readiness";
   if (roles.includes("approver")) return "approvals";
-  if (roles.includes("marketing_operator")) return "home";
+  if (roles.includes("operator")) return "home";
   if (roles.includes("viewer")) return "calendar";
 }
 
@@ -75,15 +75,15 @@ export function canPerformAction(session, clientId, name, run, { separation = fa
   const roles = rolesForClient(session, clientId);
   const admin = isPlatformAdmin(session);
   const approver = roles.includes("approver");
-  const operator = roles.includes("marketing_operator");
+  const operator = roles.includes("operator");
   const ownerEmail = run?.ownerEmail ?? run?.owner;
   const owner = Boolean(session?.email && typeof ownerEmail === "string" &&
     ownerEmail.toLowerCase() === session.email.toLowerCase());
   const ownRun = operator && owner;
   if (name === "saveBrief") return operator || approver;
   if (name === "uploadSources" || name === "saveKnowledgeSetup")
-    return admin || roles.includes("knowledge_admin");
-  if (knowledgeActions.includes(name)) return roles.includes("knowledge_admin");
+    return admin || roles.includes("brand_manager");
+  if (knowledgeActions.includes(name)) return admin || roles.includes("brand_manager");
   if (name === "requestPlanApproval") return ownRun;
   if (name === "approvePlan" || name === "rejectPlan")
     return ownRun || (approver && !owner && run?.requiresApprover === true);

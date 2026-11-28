@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Button,
   Card,
@@ -70,7 +70,7 @@ export function Clients({
   const members = data.users.filter((user) => user.assignments?.[index]?.length);
   const managersAvailable = data.users.filter((user) => user.status === "Active" && user.id != null);
   const profiles = (data.integrations.linkedin?.profiles ?? []).filter((profile) => profile.clientId === index);
-  const roles = [["Knowledge Admin", "Brand Manager"], ["Approver", "Approver"], ["Marketing Operator", "Operator"], ["Viewer", "Viewer"]];
+  const roles = [["Brand Manager", "Brand Manager"], ["Approver", "Approver"], ["Operator", "Operator"], ["Viewer", "Viewer"]];
   const approvers = members.filter((member) => member.assignments[index].includes("Approver"));
   function approverField(key, label) {
     const current = draft[key] ?? "";
@@ -107,7 +107,7 @@ export function Clients({
         headers={["Brand", "Brand Manager", "People", "Readiness", "Knowledge", "Last run", "Status", ""]}
         rows={items.map((brand, i) => {
           const members = data.users.filter((user) => user.assignments?.[brand.id]?.length);
-          const managers = members.filter((user) => user.assignments[brand.id].includes("Knowledge Admin"));
+          const managers = members.filter((user) => user.assignments[brand.id].includes("Brand Manager"));
           const report = data.readiness.find((item) => item.clientId === brand.id);
           const last = brand.last ?? data.runs.filter((run) => run.clientId === brand.id)
             .map((run) => run.startedAt).filter(Boolean).sort().at(-1);
@@ -265,7 +265,73 @@ export function Clients({
   );
 }
 
-export function Agents({ action, data }) {
+const stepNames = {
+  "social-content-orchestrator": "Orchestrator", "context-assembler": "Context Assembler", "brief-qualifier": "Brief Qualifier",
+  "content-planner": "Content Planner", gate_1: "Plan approval (Gate 1)", "post-writer": "Post Writer",
+  "post-quality-analyst": "Post Quality Analyst", gate_2: "Post approval (Gate 2)",
+};
+const limitNames = { maxPostsPerRun: "Posts per run", maxPeriodDays: "Days per brief period" };
+
+// Our Agents page on live data: each agent's pipeline and whether its skills are configured.
+function LiveAgents({ action }) {
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+  const actionRef = useRef(action);
+  actionRef.current = action;
+  useEffect(() => {
+    let active = true;
+    actionRef.current("loadAgents").then((value) => { if (active) setResult(value); })
+      .catch((reason) => { if (active) setError(reason.message || "Could not load agents."); });
+    return () => { active = false; };
+  }, []);
+  const agents = result?.agents ?? [];
+  const skills = result?.skills ?? {};
+  const skill = (key) => skills[key];
+  return (
+    <Page className="brand-settings-screen platform-agents-screen" title="Agents and skills"
+      description="Agent workflows and whether each skill is configured on the server. Skill files and IDs stay on the server and are never shown here.">
+      {error && <p role="alert">{error}</p>}
+      {!result && !error && <p className="muted">Loading agents…</p>}
+      {result && !agents.length && <Card><p className="muted">No agents configured yet.</p></Card>}
+      {agents.map((agent) => {
+        const version = agent.versions?.find((entry) => entry.version === agent.currentVersion) ?? agent.versions?.at(-1);
+        const steps = [...(version?.pipeline ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        const orchestrator = skill("social-content-orchestrator");
+        return <section key={agent.agentKey ?? agent._id} className="card">
+          <div className="our-between"><h2>{agent.name ?? agent.agentKey}</h2>
+            <div className="our-row"><Chip tone={agent.releaseStatus === "live" ? "g" : "a"}>{agent.releaseStatus ?? "—"}</Chip>
+              {version && <Chip>Version {version.version}</Chip>}</div></div>
+          {agent.outputType && <p className="muted">Produces: {agent.outputType}</p>}
+          <div>
+            {orchestrator && <div className="our-between our-line"><div><p className="our-strong">Orchestrator</p>
+              <p className="muted">Runs once per run and prepares the context for each stage.</p></div>
+              <Chip tone={orchestrator.configured ? "g" : "r"}>{orchestrator.configured ? "Skill ready · v" + orchestrator.version : "Skill not configured"}</Chip></div>}
+            {steps.map((step, index) => {
+              const status = skill(step.stageKey);
+              return <div key={step.stageKey} className="our-between our-line">
+                <p className="our-strong">{index + 1}. {stepNames[step.stageKey] ?? step.stageKey}</p>
+                {step.gate ? <Chip>Human approval</Chip>
+                  : status ? <Chip tone={status.configured ? "g" : "r"}>{status.configured ? "Skill ready · v" + status.version : "Skill not configured"}</Chip>
+                  : <Chip>App step</Chip>}
+              </div>;
+            })}
+          </div>
+          {version?.runLimits && <p className="muted">{Object.entries(version.runLimits).map(([key, value]) => (limitNames[key] ?? key) + ": " + value).join(" · ")}</p>}
+        </section>;
+      })}
+      {result?.openai && <section className="card">
+        <div className="our-between"><h2>OpenAI</h2><Chip tone={result.openai.apiKey && result.openai.model ? "g" : "r"}>{result.openai.apiKey && result.openai.model ? "Connected" : "Not set up"}</Chip></div>
+        <p>Model: {result.openai.model ?? <span className="muted">not set</span>} · API key {result.openai.apiKey ? "set" : "not set"}</p>
+      </section>}
+    </Page>
+  );
+}
+
+export function Agents(props) {
+  return props.data.liveAccess ? <LiveAgents {...props} /> : <PreviewAgents {...props} />;
+}
+
+function PreviewAgents({ action, data }) {
   const [selected, setSelected] = useState(null);
   const active = data.agents.find((agent) => agent.id === selected) ?? data.agents[0];
   return (
