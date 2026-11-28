@@ -19,7 +19,22 @@ const runDate = new Intl.DateTimeFormat("en-GB", {
   day: "numeric", month: "short", timeZone: "Asia/Kolkata",
 });
 const runOwner = (run) => run.ownerName ?? run.owner ?? run.ownerEmail;
-const runTones = { Completed: "g", Failed: "r", Blocked: "r", "Awaiting Gate 1": "b", "Awaiting Gate 2": "b" };
+const runTones = { Completed: "g", Failed: "r", Blocked: "r", "Awaiting Gate 1": "b", "Awaiting Gate 2": "b",
+  "Awaiting plan approval": "b", "Awaiting post approval": "b", Scheduled: "g" };
+// Live runs carry raw status and stage keys; show them in plain words.
+const statusLabels = {
+  running: "Agents working", awaiting_plan_approval: "Awaiting plan approval", awaiting_post_approval: "Awaiting post approval",
+  writing: "Writing posts", blocked: "Blocked", failed: "Failed", cancelled: "Cancelled", completed: "Completed", draft: "Draft",
+};
+const stageLabels = {
+  "context-assembler": "Assembling context", "brief-qualifier": "Qualifying brief", "content-planner": "Planning content",
+  gate_1: "Plan review", "post-writer": "Writing posts", "post-quality-analyst": "Quality check", gate_2: "Post review",
+};
+const statusText = (value) => statusLabels[value] ?? value;
+const postSummary = (posts) => Object.entries(posts.reduce((counts, { status }) => {
+  const key = String(status ?? "draft").replace(/_/g, " ").toLowerCase();
+  return { ...counts, [key]: (counts[key] ?? 0) + 1 };
+}, {})).map(([key, count]) => count + " " + key).join(" · ");
 
 function RunsList({ data, client, href }) {
   const [agent, setAgent] = useState("");
@@ -28,10 +43,11 @@ function RunsList({ data, client, href }) {
   const runs = data.runs.filter((item) => item.clientId === client?.id && client);
   const agents = [...new Set(runs.map(({ agentId }) => agentId).filter(Boolean))];
   const statuses = [...new Set(runs.map(({ status }) => status).filter(Boolean))].sort();
+  // Filter labels use the same plain words as the table.
   const owners = [...new Set(runs.map(runOwner).filter(Boolean))].sort();
   const shown = runs.filter((run) => (!agent || run.agentId === agent) &&
     (!status || run.status === status) && (!owner || runOwner(run) === owner))
-    .sort((a, b) => (Date.parse(b.startedAt) || 0) - (Date.parse(a.startedAt) || 0));
+    .sort((a, b) => (Date.parse(b.startedAt ?? b.createdAt) || 0) - (Date.parse(a.startedAt ?? a.createdAt) || 0));
   const agentLabel = (id) => configuredAgent(data, id)?.name ?? id;
   return (
     <Page className="runs-list" title="Runs"
@@ -45,7 +61,7 @@ function RunsList({ data, client, href }) {
         </select>
         <select aria-label="Filter by status" value={status} onChange={(event) => setStatus(event.target.value)}>
           <option value="">All statuses</option>
-          {statuses.map((value) => <option key={value}>{value}</option>)}
+          {statuses.map((value) => <option key={value} value={value}>{statusText(value)}</option>)}
         </select>
         <select aria-label="Filter by starter" value={owner} onChange={(event) => setOwner(event.target.value)}>
           <option value="">Anyone</option>
@@ -53,23 +69,26 @@ function RunsList({ data, client, href }) {
         </select>
       </div>
       <Card>
-        <Table headers={["Run", "Agent", "Status", "Progress", "Started by", "Started", "Knowledge", ""]}
+        <Table headers={["Run", "Status", "Posts", "Started by", "Started", ""]}
           rows={shown.map((item) => {
             const brief = data.briefs.find(({ id, clientId }) => id === item.briefId && clientId === client.id);
             const version = item.briefVersion ?? brief?.version;
             const progress = item.status === "Completed" ? 100 : item.progressPercent;
-            const started = Date.parse(item.startedAt);
+            const started = Date.parse(item.startedAt ?? item.createdAt);
+            const posts = data.posts.filter(({ runId }) => runId === item.id);
+            const status = statusText(item.status);
+            const step = item.progressLabel ?? item.currentStep ?? stageLabels[item.currentStageKey];
             return { key: item.id, cells: [
-              <div><strong>{item.name ?? item.period ?? item.id}</strong><div className="muted">{item.id}{version != null && ` · brief v${version}`}</div></div>,
-              agentLabel(item.agentId) ?? "—",
-              <Chip tone={runTones[item.status]}>{item.status ?? "—"}</Chip>,
-              <div className="runs-progress">
+              <div><strong>{item.name ?? item.title ?? brief?.title ?? item.period ?? item.id}</strong><div className="muted">
+                {agentLabel(item.agentId) ?? item.agentKey ?? "Agent"}{version != null && ` · brief v${version}`}
+                {item.knowledgeVersion != null && ` · knowledge ${typeof item.knowledgeVersion === "number" ? "v" + item.knowledgeVersion : item.knowledgeVersion}`}</div></div>,
+              <div className="runs-progress"><Chip tone={runTones[status]}>{status ?? "—"}</Chip>
                 {Number.isFinite(progress) && <progress aria-label="Run progress" value={progress} max={100} />}
-                <span>{item.progressLabel ?? item.currentStep ?? (item.status === "Completed" ? "Completed" : "—")}</span>
-              </div>,
+                {step && <span className="muted">{step}</span>}
+                {item.blocker?.reason && <span className="muted">{String(item.blocker.reason).slice(0, 140)}</span>}</div>,
+              posts.length ? <div>{posts.length}<div className="muted">{postSummary(posts)}</div></div> : "—",
               runOwner(item) ?? "—",
               Number.isFinite(started) ? runDate.format(started) : "—",
-              item.knowledgeVersion == null ? "—" : typeof item.knowledgeVersion === "number" ? `v${item.knowledgeVersion}` : item.knowledgeVersion,
               <WorkflowLink href={href("runs", { run: item.id })}>Open</WorkflowLink>,
             ] };
           })}

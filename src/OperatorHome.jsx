@@ -289,7 +289,8 @@ export function ContentCalendar({ data, client, href, action, canAct = () => tru
   const anchor = mode === "Month" ? month : cursor;
   const start = offsetDay(anchor, -((anchor.getUTCDay() + 6) % 7));
   const days = Array.from({ length: mode === "Month" ? 42 : mode === "Week" ? 7 : 14 }, (_, i) => offsetDay(start, i));
-  const brandPosts = client ? data.posts.filter((post) => post.clientId === client.id && Number.isFinite(Date.parse(post.scheduledAt))) : [];
+  const brandPosts = client ? data.posts.filter((post) => post.clientId === client.id && Number.isFinite(Date.parse(post.scheduledAt)))
+    .map((post) => ({ ...post, status: post.displayStatus ?? post.status })) : [];
   const runs = new Map(data.runs.filter((run) => run.clientId === client?.id).map((run) => [run.id, run]));
   const agentOf = (post) => post.agentId ?? runs.get(post.runId)?.agentId;
   const agents = [...new Set(brandPosts.map(agentOf).filter(Boolean))];
@@ -343,7 +344,6 @@ export function ContentCalendar({ data, client, href, action, canAct = () => tru
                       <div><Chip tone={tones[post.status]}>{post.status}</Chip></div>
                       {post.status === "Scheduled" && runs.has(post.runId) && (
                         <div className="admin-actions">
-                          {canAct("holdPost", runs.get(post.runId)) && <Button disabled={busy} onClick={() => changeSchedule(post, "holdPost", "Hold")}>Hold</Button>}
                           {canAct("cancelScheduledPost", runs.get(post.runId)) && <Button disabled={busy} onClick={() => changeSchedule(post, "cancelScheduledPost", "Cancel")}>Cancel</Button>}
                         </div>
                       )}

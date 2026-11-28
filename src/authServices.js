@@ -41,6 +41,17 @@ function toBrand(brand) {
   };
 }
 
+// Live posts keep their raw status; these fields drive the calendar and outputs screens.
+const postView = (record) => {
+  const scheduledAt = record.publishing?.scheduledAt ?? record.scheduledAt ?? null;
+  const raw = String(record.status ?? "draft").toLowerCase();
+  const displayStatus = raw === "approved" ? (scheduledAt ? "Scheduled" : "Approved")
+    : raw === "published" ? "Live" : raw === "publishing" ? "Publishing" : raw === "cancelled" ? "Cancelled"
+    : raw === "awaiting approval" ? "Awaiting approval" : raw === "changes_requested" ? "Changes requested" : "Draft";
+  return { scheduledAt, displayStatus, destination: record.publishing?.destination ?? record.destination,
+    liveUrl: record.publishing?.url ?? record.liveUrl, approvedBy: record.approvedByName ?? record.approvedBy };
+};
+
 const pathId = (value) => encodeURIComponent(String(value));
 const brandPath = (id) => "/workflow/brands/" + pathId(id);
 const projectPath = (id) => "/workflow/projects/" + pathId(id);
@@ -168,7 +179,7 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
         projects: [{ ...project, id: projectId, clientId }],
         briefs: briefs.briefs.map(scoped),
         runs: runs.runs.map((record) => ({ ...scoped(record), briefId: record.briefId == null ? undefined : String(record.briefId) })),
-        posts: posts.contentItems.map((record) => ({ ...scoped(record), runId: record.runId == null ? undefined : String(record.runId) })),
+        posts: posts.contentItems.map((record) => ({ ...scoped(record), ...postView(record), runId: record.runId == null ? undefined : String(record.runId) })),
       };
     }));
     return Object.fromEntries(["projects", "briefs", "runs", "posts"].map((key) => [key, batches.flatMap((batch) => batch[key])]));
@@ -326,7 +337,7 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
     async loadPostDetail({ projectId, postId }) {
       const { record, draftVersions, reviewDecisions } = await call("/workflow/projects/" + pathId(projectId) + "/posts/" + pathId(postId));
       const current = draftVersions.find((draft) => String(draft.id ?? draft._id) === String(record.currentDraftVersionId));
-      return { data: { posts: [{ ...record, id: postId, clientId: String(record.clientId), projectId,
+      return { data: { posts: [{ ...record, ...postView(record), id: postId, clientId: String(record.clientId), projectId,
         runId: String(record.runId), draftVersions, reviewDecisions, copy: current?.text ?? record.copy,
         version: current?.version ?? record.version }] } };
     },

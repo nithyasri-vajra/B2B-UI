@@ -135,53 +135,71 @@ function LiveNewRun({ data, client, run, href, action, canAct }) {
     timer = setTimeout(refresh, 2000);
     return () => { active = false; clearTimeout(timer); };
   }, [progressId, progressProject, progressStatus]);
+  const readiness = data.readiness.find((item) => item.clientId === client?.id);
+  // The server checks readiness again when the run starts.
+  const blocked = Boolean(readiness) && !canStartRun(readiness);
+  const project = projects.find(({ id }) => id === selected);
+  const editing = selected && !run && !progress && canAct("saveBrief");
   return (
-    <Page className="new-run-screen" title={run ? "Run brief" : "New run"}>
-      <a href={href("runs")}>← Runs</a>
+    <Page className="new-run-screen" title={run ? "Run brief" : "New run"}
+      description={(agents.find(({ agentKey: key }) => key === agentKey)?.name ?? "Agent") + " · attach the period brief, check it, and run."}>
+      <a href={href("runs")}>← Back to runs</a>
       {data.workflowLoadError && <p role="alert">{data.workflowLoadError}</p>}
-      <Card title="Period brief">
-        {projects.length ? <Field label="Project">
-          <select value={selected} disabled={Boolean(run || busy || progress)} onChange={(event) => { setSelected(event.target.value); setBriefId(""); }}>
-            {projects.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
-          </select>
-        </Field> : <p>No projects are available for this brand.</p>}
-        {selected && !run && !progress && canAct("saveBrief") && <>
-          <Field label="Brief">
-            <select value={briefId} onChange={(event) => setBriefId(event.target.value)}>
-              <option value="">Create a brief</option>
-              {briefs.map(({ id, title }) => <option key={id} value={id}>{title}</option>)}
+      <div className="new-run-layout">
+        <Card title="1 · Period brief">
+          <p><a href={periodBriefTemplate} download="period-brief-template.xlsx">Download brief template (.xlsx)</a>
+            <span className="muted"> · optional, if you don't have the template yet</span></p>
+          {projects.length > 1 || !projects.length ? (projects.length ? <Field label="Project">
+            <select value={selected} disabled={Boolean(run || busy || progress)} onChange={(event) => { setSelected(event.target.value); setBriefId(""); }}>
+              {projects.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
             </select>
-          </Field>
-          <LiveBrief key={selected + ":" + briefId + ":" + (brief?.currentVersion ?? 0)} brief={brief}
-            projectId={selected} client={client} action={async (name, payload) => {
-              const result = await action(name, payload);
-              const savedBrief = result?.data?.briefs?.[0];
-              if (savedBrief) setBriefId(savedBrief.id);
-              return result;
-            }} />
-          <Field label="Agent">
-            <select value={agentKey} disabled={busy} onChange={(event) => setSelectedAgent(event.target.value)}>
-              {!agents.length && <option value="">No enabled agent</option>}
-              {agents.map((agent) => <option key={agent.agentKey} value={agent.agentKey}>
-                {agent.name ?? agent.agentKey}
-              </option>)}
-            </select>
-          </Field>
-          <Button primary disabled={busy || !revision?.validated || !agentKey}
-            onClick={() => submit("startRun", {
-              projectId: selected, briefId: brief.id, briefVersion: revision.version, agentKey,
-            })}>Run agent</Button>
-          {!revision?.validated && <p>Upload and save a validated Excel brief to run the agent.</p>}
-          {feedback}
-        </>}
-        {progress && <>
-          <p role="status">Run {progress.id} · {progress.currentStageKey ?? "Starting"} · {progress.status.replace(/_/g, " ")}</p>
-          {progress.blocker?.reason && <p role="alert">{progress.blocker.reason}</p>}
-          {progressError && <p role="status">{progressError}</p>}
-          <a href={href("runs", { run: progress.id })}>Open run</a>
-        </>}
-        {selected && (run || !canAct("saveBrief")) && <p>{brief?.title ?? "Brief editing is unavailable for this view."}</p>}
-      </Card>
+          </Field> : <p>No projects are available for this brand.</p>) : <p className="muted">Project: {project?.name}</p>}
+          {editing && <>
+            {briefs.length > 0 && <Field label="Brief">
+              <select value={briefId} onChange={(event) => setBriefId(event.target.value)}>
+                <option value="">Upload a new brief</option>
+                {briefs.map(({ id, title }) => <option key={id} value={id}>{title}</option>)}
+              </select>
+            </Field>}
+            <LiveBrief key={selected + ":" + briefId + ":" + (brief?.currentVersion ?? 0)} brief={brief}
+              projectId={selected} client={client} action={async (name, payload) => {
+                const result = await action(name, payload);
+                const savedBrief = result?.data?.briefs?.[0];
+                if (savedBrief) setBriefId(savedBrief.id);
+                return result;
+              }} />
+          </>}
+          {selected && (run || !canAct("saveBrief")) && <p>{brief?.title ?? "Brief editing is unavailable for this view."}</p>}
+        </Card>
+        <Card title="2 · Before you run">
+          {readiness && <p><Chip tone={blocked ? "a" : "g"}>{blocked ? "Knowledge readiness check needed" : "Knowledge ready" + (readiness.verdict === "LIMITED" ? " (limited)" : "")}</Chip></p>}
+          {blocked && <p>{readiness?.reason ?? "Complete the readiness check before running the agent."}{" "}
+            {href("readiness") && <a href={href("readiness")}>Open readiness</a>}</p>}
+          {readiness?.limitations?.map((item) => <p key={item} className="muted">{item}</p>)}
+          <p><Chip tone={revision?.validated ? "g" : "a"}>{revision?.validated ? "Brief validated and saved" : "Brief not saved yet"}</Chip></p>
+          {editing && <>
+            {agents.length > 1 ? <Field label="Agent">
+              <select value={agentKey} disabled={busy} onChange={(event) => setSelectedAgent(event.target.value)}>
+                {agents.map((agent) => <option key={agent.agentKey} value={agent.agentKey}>{agent.name ?? agent.agentKey}</option>)}
+              </select>
+            </Field> : !agents.length && <p role="alert">No agent is enabled for this project.</p>}
+            <p className="muted">Plan approval (Gate 1): you, as the run owner if you're an Operator; otherwise the brand's named approver.</p>
+            <Button primary disabled={busy || blocked || !revision?.validated || !agentKey}
+              onClick={() => submit("startRun", {
+                projectId: selected, briefId: brief.id, briefVersion: revision.version, agentKey,
+              })}>Run {agents.find(({ agentKey: key }) => key === agentKey)?.name ?? "agent"}</Button>
+            {!revision?.validated && <p className="muted">Upload and save a validated Excel brief to run the agent.</p>}
+            {feedback}
+          </>}
+          {progress && <>
+            <p role="status">Run {progress.id} · {progress.currentStageKey ?? "Starting"} · {progress.status.replace(/_/g, " ")}</p>
+            {progress.blocker?.reason && <p role="alert">{progress.blocker.reason}</p>}
+            {progressError && <p role="status">{progressError}</p>}
+            <a href={href("runs", { run: progress.id })}>Open run</a>
+          </>}
+          <p className="muted">The brief and the brand's approved knowledge are sent to the agents on the server. Skills and keys never reach your browser.</p>
+        </Card>
+      </div>
     </Page>
   );
 }
