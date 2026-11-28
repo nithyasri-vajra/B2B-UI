@@ -89,10 +89,17 @@ function Decision({ review, action }) {
   </Card>;
 }
 
-// Post review (Gate 2): no approve/reject. The reviewer either describes what should
-// change and regenerates the post, or marks the current version as final.
+const toLocalInput = (value) => {
+  const date = new Date(value);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+};
+
+// Post review (Gate 2): no reject. The reviewer reads the post and either describes
+// what should change and regenerates it (as often as needed), or approves it with a
+// publishing date, which puts it on the calendar and into the publishing pipeline.
 function PostFeedback({ post, run, review, mayFinalize, canRegenerate, action }) {
   const [text, setText] = useState("");
+  const [schedule, setSchedule] = useState(review?.scheduledAt ? toLocalInput(review.scheduledAt) : "");
   const [stepUp, setStepUp] = useState(false);
   const regenerate = useAction(action);
   const finalize = useAction(async (name, values) => {
@@ -130,13 +137,25 @@ function PostFeedback({ post, run, review, mayFinalize, canRegenerate, action })
         </Button>
       </form>}
       {regenerate.feedback}
-      {review && mayFinalize && <div className="admin-actions" style={{ marginTop: 16 }}>
-        {stepUp ? <Button onClick={() => finalize.submit("signIn", { reauthenticate: true })} disabled={finalize.busy}>Confirm Google sign-in</Button> :
-          <Button disabled={finalize.busy} onClick={() => finalize.submit("decideReview", {
+      {review && mayFinalize && (stepUp
+        ? <div className="admin-actions" style={{ marginTop: 16 }}>
+          <Button onClick={() => finalize.submit("signIn", { reauthenticate: true })} disabled={finalize.busy}>Confirm Google sign-in</Button>
+          {finalize.feedback}
+        </div>
+        : <form className="admin-form" style={{ marginTop: 16 }} onSubmit={(event) => {
+          event.preventDefault();
+          finalize.submit("decideReview", {
             reviewId: review._id, projectId: String(review.projectId), decision: "approved", reason: "",
-          })}>Mark as final</Button>}
-        {finalize.feedback}
-      </div>}
+            scheduledAt: new Date(schedule).toISOString(),
+          });
+        }}>
+          <Field label="Publish on (your local time)">
+            <input type="datetime-local" required value={schedule} min={toLocalInput(new Date())}
+              disabled={finalize.busy} onChange={(event) => setSchedule(event.target.value)} />
+          </Field>
+          <Button primary type="submit" disabled={finalize.busy || !schedule}>Approve and schedule</Button>
+          {finalize.feedback}
+        </form>)}
     </>}
     {history.length > 0 && <>
       <p><strong>Earlier feedback</strong></p>

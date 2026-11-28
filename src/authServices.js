@@ -284,8 +284,9 @@ export function createAuthServices(basePath, { origin, request = fetch } = {}) {
         { planVersion, selectedPlanItemIds, askApprover });
       return services.loadRunDetail({ projectId, runId });
     },
-    async decideReview({ projectId, reviewId, decision, reason }) {
-      await call(projectPath(projectId) + "/reviews/" + pathId(reviewId) + "/decision", { decision, reason });
+    async decideReview({ projectId, reviewId, decision, reason, scheduledAt }) {
+      await call(projectPath(projectId) + "/reviews/" + pathId(reviewId) + "/decision",
+        { decision, reason, ...(scheduledAt ? { scheduledAt } : {}) });
       return { message: "Decision saved." };
     },
     async savePostDraft({ projectId, postId, currentDraftVersionId, text }) {
