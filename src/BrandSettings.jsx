@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Button, Card, Field, Page, Table } from "./AdminControls";
+import { Button, Card, Chip, Field, Page, Table } from "./AdminControls";
+import { OurDialog } from "./OurUi";
 import { createAuthServices } from "./authServices";
 
 // Brand settings for the brand's Brand Managers: brand details, named approvers
@@ -31,6 +32,8 @@ export default function BrandSettings({ client, data }) {
   const [edits, setEdits] = useState({});
   const [newEmail, setNewEmail] = useState("");
   const [newRoles, setNewRoles] = useState(["viewer"]);
+  const [tab, setTab] = useState("details");
+  const [addingAgent, setAddingAgent] = useState(false);
   const services = authApiPath ? createAuthServices(authApiPath).services : null;
   const me = data?.session?.email?.toLowerCase();
 
@@ -62,11 +65,41 @@ export default function BrandSettings({ client, data }) {
   const members = state?.members ?? [];
   const approvers = members.filter((member) => member.roles.includes("approver"));
   const brand = state?.brand;
+  // Agents switched on for this brand (live agents only), as the backend lists them on the brand's projects.
+  const brandAgents = [...new Map((data?.projects ?? []).filter(({ clientId }) => clientId === client.id)
+    .flatMap(({ agents = [] }) => agents).map((agent) => [agent.agentKey, agent])).values()];
+  const tabs = [["details", "Details"], ["people", "People"], ["agents", "Agents"], ["integrations", "Integrations"]];
   return <Page className="brand-settings-screen" title="Brand settings" description={client.name}>
+    <nav className="our-tabs" aria-label="Brand settings sections">
+      {tabs.map(([key, label]) => <button key={key} type="button" className={"our-tab our-tab-button" + (tab === key ? " on" : "")}
+        aria-current={tab === key ? "page" : undefined} onClick={() => { setTab(key); setMessage(""); setError(""); }}>{label}</button>)}
+    </nav>
     {error && <p role="alert">{error}</p>}
     {message && <p className="muted" role="status">{message}</p>}
     {!state && !error && <p className="muted">Loading…</p>}
-    {brand && <>
+    {brand && tab === "agents" && <section className="card our-flush">
+      <div className="our-pad our-between"><div><h2>Agents on this brand</h2>
+        <p className="muted">Agents that can run for {client.name}. Each agent's runs use this brand's knowledge and people.</p></div>
+        <Button onClick={() => setAddingAgent(true)}>Add agent</Button></div>
+      <div className="admin-table"><table>
+        <thead><tr><th>Agent</th><th>Status</th></tr></thead>
+        <tbody>
+          {brandAgents.map((agent) => <tr key={agent.agentKey}><td className="our-strong">{agent.name ?? agent.agentKey}</td><td><Chip tone="g">On</Chip></td></tr>)}
+          {!brandAgents.length && <tr><td colSpan={2} className="muted">No agents are switched on for this brand yet.</td></tr>}
+        </tbody>
+      </table></div>
+    </section>}
+    {addingAgent && <OurDialog title="Add an agent" onClose={() => setAddingAgent(false)}>
+      <p>No other agents are available yet.</p>
+      <p className="muted">When a new agent is built, it will appear here so you can add it to {client.name}.</p>
+    </OurDialog>}
+    {brand && tab === "integrations" && <section className="card our-stack">
+      <div className="our-between"><h2>LinkedIn</h2><Chip>Not connected</Chip></div>
+      <p>Connect LinkedIn so approved posts can be published from here.</p>
+      <p className="muted">Connecting will be switched on once the LinkedIn app credentials are added.</p>
+      <div><Button disabled>Connect LinkedIn</Button></div>
+    </section>}
+    {brand && tab === "details" && <>
       <Card title="Brand details">
         <form className="admin-form" onSubmit={(event) => {
           event.preventDefault();
@@ -81,26 +114,8 @@ export default function BrandSettings({ client, data }) {
           <Button primary type="submit" disabled={busy || brand.archived}>Save details</Button>
         </form>
       </Card>
-      <Card title="Named approvers">
-        <p className="muted">Plans and posts that need an approver go to the main approver, or the backup when needed.</p>
-        <form className="admin-form" onSubmit={(event) => {
-          event.preventDefault();
-          const form = new FormData(event.currentTarget);
-          const values = Object.fromEntries(["defaultApproverUserId", "backupApproverUserId"]
-            .map((key) => [key, form.get(key)]).filter(([key, value]) => value && value !== String(brand[key] ?? "")));
-          if (Object.keys(values).length) run(() => services.saveBrandDetails({ clientId: client.id, values }));
-        }}>
-          {[["defaultApproverUserId", "Main approver"], ["backupApproverUserId", "Backup approver"]].map(([key, label]) =>
-            <Field key={key} label={label}>
-              <select name={key} defaultValue={String(brand[key] ?? "")} disabled={busy || brand.archived}>
-                <option value="">Not set</option>
-                {approvers.map((member) => <option key={member.id} value={member.id}>{member.name} ({member.email})</option>)}
-              </select>
-            </Field>)}
-          <Button primary type="submit" disabled={busy || brand.archived || !approvers.length}>Save approvers</Button>
-          {!approvers.length && <p className="muted">Give someone the Approver role below first.</p>}
-        </form>
-      </Card>
+    </>}
+    {brand && tab === "people" && <>
       <Card title="People on this brand">
         <Table headers={["Person", "Roles", ""]} empty="Nobody has a role on this brand yet."
           rows={members.map((member) => {
@@ -134,6 +149,26 @@ export default function BrandSettings({ client, data }) {
           <Field label="Roles"><RoleChecks idPrefix="new-" value={newRoles} disabled={busy || brand.archived} onChange={setNewRoles} /></Field>
           <Button primary type="submit" disabled={busy || brand.archived || !newRoles.length}>Add person</Button>
           <p className="muted">They can sign in with Google using this email. Platform-wide access is managed by a Platform Admin.</p>
+        </form>
+      </Card>
+      <Card title="Named approvers">
+        <p className="muted">Plans and posts that need an approver go to the main approver, or the backup when needed.</p>
+        <form className="admin-form" onSubmit={(event) => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          const values = Object.fromEntries(["defaultApproverUserId", "backupApproverUserId"]
+            .map((key) => [key, form.get(key)]).filter(([key, value]) => value && value !== String(brand[key] ?? "")));
+          if (Object.keys(values).length) run(() => services.saveBrandDetails({ clientId: client.id, values }));
+        }}>
+          {[["defaultApproverUserId", "Main approver"], ["backupApproverUserId", "Backup approver"]].map(([key, label]) =>
+            <Field key={key} label={label}>
+              <select name={key} defaultValue={String(brand[key] ?? "")} disabled={busy || brand.archived}>
+                <option value="">Not set</option>
+                {approvers.map((member) => <option key={member.id} value={member.id}>{member.name} ({member.email})</option>)}
+              </select>
+            </Field>)}
+          <Button primary type="submit" disabled={busy || brand.archived || !approvers.length}>Save approvers</Button>
+          {!approvers.length && <p className="muted">Give someone the Approver role below first.</p>}
         </form>
       </Card>
     </>}
