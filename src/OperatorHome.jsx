@@ -280,82 +280,65 @@ function offsetDay(day, offset) {
   return date;
 }
 
+const agendaDay = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: calendarZone });
+
+// Content calendar: our day-by-day list of planned, scheduled and live posts (times in IST).
 export function ContentCalendar({ data, client, href, action, canAct = () => true }) {
-  const [mode, setMode] = useState("2 weeks");
+  const [range, setRange] = useState("Upcoming");
   const [agent, setAgent] = useState("");
-  const [cursor, setCursor] = useState(() => new Date(dateKey.format(new Date())));
   const { submit, busy, feedback } = useAction(action);
-  const month = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth(), 1));
-  const anchor = mode === "Month" ? month : cursor;
-  const start = offsetDay(anchor, -((anchor.getUTCDay() + 6) % 7));
-  const days = Array.from({ length: mode === "Month" ? 42 : mode === "Week" ? 7 : 14 }, (_, i) => offsetDay(start, i));
   const brandPosts = client ? data.posts.filter((post) => post.clientId === client.id && Number.isFinite(Date.parse(post.scheduledAt)))
     .map((post) => ({ ...post, status: post.displayStatus ?? post.status })) : [];
   const runs = new Map(data.runs.filter((run) => run.clientId === client?.id).map((run) => [run.id, run]));
   const agentOf = (post) => post.agentId ?? runs.get(post.runId)?.agentId;
   const agents = [...new Set(brandPosts.map(agentOf).filter(Boolean))];
-  const posts = brandPosts.filter((post) => !agent || agentOf(post) === agent);
-  const tones = { Scheduled: "b", Verified: "g", Live: "g", Published: "g", "Published (unverified)": "g", "Awaiting approval": "b", Planned: "a", Blocked: "r", "On hold": "a", Failed: "r", Cancelled: "r" };
-  const markers = { Verified: "Live", Live: "Live", Published: "Live", "Published (unverified)": "Published", Failed: "Blocked" };
+  const tones = { Scheduled: "b", Verified: "g", Live: "g", Published: "g", "Published (unverified)": "g", "Awaiting approval": "b", Planned: "a", Blocked: "r", Failed: "r", Cancelled: "r" };
   const today = dateKey.format(new Date());
-
-  function move(direction) {
-    setCursor(mode === "Month"
-      ? new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + direction, 1))
-      : offsetDay(cursor, direction * days.length));
+  const posts = brandPosts.filter((post) => (!agent || agentOf(post) === agent) &&
+    (range === "Upcoming" ? dateKey.format(new Date(post.scheduledAt)) >= today : dateKey.format(new Date(post.scheduledAt)) < today))
+    .sort((a, b) => (Date.parse(a.scheduledAt) - Date.parse(b.scheduledAt)) * (range === "Upcoming" ? 1 : -1));
+  const days = [];
+  for (const post of posts) {
+    const key = dateKey.format(new Date(post.scheduledAt));
+    if (days.at(-1)?.key !== key) days.push({ key, label: agendaDay.format(new Date(post.scheduledAt)), posts: [] });
+    days.at(-1).posts.push(post);
   }
 
-  function changeSchedule(post, name, label) {
-    const reason = window.prompt(label + " this scheduled post? Enter a reason to confirm.");
-    if (reason?.trim()) submit(name, { postId: post.id, runId: post.runId, reason: reason.trim() });
+  function cancel(post) {
+    const reason = window.prompt("Cancel this scheduled post? Enter a reason to confirm.");
+    if (reason?.trim()) submit("cancelScheduledPost", { postId: post.id, runId: post.runId, reason: reason.trim() });
   }
 
   return (
-    <Page className="content-calendar" title="Content calendar" description={client ? client.name + " · Times in IST" : "Times in IST"}
-      actions={
-          <>
-            <select aria-label="Filter by agent" value={agent} onChange={(event) => setAgent(event.target.value)}>
-              <option value="">All agents</option>
-              {agents.map((id) => <option key={id} value={id}>{configuredAgent(data, id)?.name ?? id}</option>)}
-            </select>
-            <Button onClick={() => move(-1)}>Previous</Button>
-            <strong>{mode === "Month" ? calendarMonth.format(anchor) : calendarRange.formatRange(start, days.at(-1))}</strong>
-            <Button onClick={() => move(1)}>Next</Button>
-            <Tabs values={["Month", "Week", "2 weeks"]} value={mode} onChange={setMode} />
-          </>
-      }>
-      <div className="content-calendar-legend" aria-label="Status legend">
-        {["Live", "Scheduled", "Awaiting approval", "Planned", "Blocked"].map((status) => <span key={status} data-status={status}>{status}</span>)}
-      </div>
-      <Card>
-        {feedback}
-        <div className="workflow-calendar-scroll">
-          <div className="workflow-calendar">
-            {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => <strong key={day}>{day}</strong>)}
-            {days.map((day) => {
-              const key = day.toISOString().slice(0, 10);
-              return (
-                <section className="workflow-calendar-day" key={key} aria-label={key} aria-current={key === today ? "date" : undefined}>
-                  <time className="muted" dateTime={key}>{day.getUTCDate()}{key === today && " · Today"}</time>
-                  {posts.filter((post) => dateKey.format(new Date(post.scheduledAt)) === key).map((post) => (
-                    <article className="workflow-calendar-post" key={post.id} data-status={markers[post.status] ?? post.status}>
-                      {href("post") ? <a href={href("post", { run: post.runId, post: post.id })}>{post.title ?? "Open post"}</a> : post.title}
-                      <span>{calendarTime.format(new Date(post.scheduledAt))}</span>
-                      <div><Chip tone={tones[post.status]}>{post.status}</Chip></div>
-                      {post.status === "Scheduled" && runs.has(post.runId) && (
-                        <div className="admin-actions">
-                          {canAct("cancelScheduledPost", runs.get(post.runId)) && <Button disabled={busy} onClick={() => changeSchedule(post, "cancelScheduledPost", "Cancel")}>Cancel</Button>}
-                        </div>
-                      )}
-                    </article>
-                  ))}
-                </section>
-              );
-            })}
-          </div>
-        </div>
-        {!posts.length && <p className="muted">No posts scheduled.</p>}
-      </Card>
+    <Page className="content-calendar" title="Content calendar"
+      description={(client ? client.name + " · " : "") + "Planned, scheduled and live posts · times in IST"}
+      actions={<>
+        {agents.length > 1 && <select aria-label="Filter by agent" value={agent} onChange={(event) => setAgent(event.target.value)}>
+          <option value="">All agents</option>
+          {agents.map((id) => <option key={id} value={id}>{configuredAgent(data, id)?.name ?? id}</option>)}
+        </select>}
+        <Tabs values={["Upcoming", "Past"]} value={range} onChange={setRange} />
+      </>}>
+      {feedback}
+      {!days.length && <Card><p className="muted">{range === "Upcoming" ? "No posts scheduled from today onwards." : "No earlier posts."}</p></Card>}
+      {days.map((day) => (
+        <Card key={day.key} title={day.label + (day.key === today ? " · Today" : "")}>
+          {day.posts.map((post) => (
+            <div key={post.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "10px 0", borderTop: "1px solid var(--app-border, #e4ddcf)" }}>
+              <div style={{ minWidth: 0 }}>
+                {href("post") ? <a href={href("post", { run: post.runId, post: post.id })}><strong>{post.title ?? "Open post"}</strong></a> : <strong>{post.title}</strong>}
+                <p className="muted" style={{ margin: "2px 0 0" }}>{[calendarTime.format(new Date(post.scheduledAt)),
+                  runs.get(post.runId)?.title, post.destination === "linkedin" ? "LinkedIn" : post.destination].filter(Boolean).join(" · ")}</p>
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+                <Chip tone={tones[post.status]}>{post.status}</Chip>
+                {post.status === "Scheduled" && runs.has(post.runId) && canAct("cancelScheduledPost", runs.get(post.runId)) &&
+                  <Button disabled={busy} onClick={() => cancel(post)}>Cancel</Button>}
+              </div>
+            </div>
+          ))}
+        </Card>
+      ))}
     </Page>
   );
 }
