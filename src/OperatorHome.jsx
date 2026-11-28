@@ -1,5 +1,6 @@
 import { useId, useState } from "react";
 import { Button, Card, Chip, Page, Tabs, useAction } from "./AdminControls";
+import { AppShell } from "./AppShell";
 import "./workflow.css";
 import "./brand-home.css";
 import "./content-calendar.css";
@@ -37,119 +38,21 @@ export function canStartRun(report) {
   );
 }
 
-const nav = [
-  ["home", "Home"],
-  ["new-run", "Agents"],
-  ["runs", "Runs"],
-  ["approvals", "My approvals"],
-  ["calendar", "Content calendar"],
-  ["outputs", "Outputs"],
-  ["knowledge", "Knowledge"],
-  ["records", "Knowledge records"],
-  ["setup", "Knowledge setup"],
-  ["audit", "Audit log"],
-  ["profile", "My profile"],
-];
+// The brand workspace uses the shared sidebar and top bar (AppShell).
 export function WorkflowShell({
-  page,
-  data,
-  clients,
-  client,
-  onClientChange,
-  href,
-  brandsHref,
-  logout,
-  children,
+  page, data, clients, client, onClientChange, href, brandsHref, approvalsHref, profileHref,
+  platformHref, onSignOut, children,
 }) {
-  const clientId = useId();
-  const [showNotifications, setShowNotifications] = useState(false);
-  const approvals = data.approvals.filter(
-    (item) => item.clientId === client?.id && item.status === "Pending",
-  ).length;
-  const notifications = data.notifications.filter(
-    (item) => !item.clientId || item.clientId === client?.id,
-  );
-  const current = ["plan", "post"].includes(page) ? "approvals" : page;
+  const approvals = (data.reviewDecisions ?? []).filter((item) => item.status === "pending").length ||
+    data.approvals.filter((item) => item.clientId === client?.id && item.status === "Pending").length;
   return (
-    <div className={"b2b-admin workflow" + (page === "home" ? " brand-home-shell" : "")}>
-      <div className="app">
-        <nav className="side" aria-label="Main">
-          <div className="app-brand-label">
-            <span className="app-brand-mark" aria-hidden="true">▼</span>
-            <strong>B2B Agents</strong>
-          </div>
-          {brandsHref && <a className="nav" href={brandsHref}>My brands</a>}
-          {nav.filter(([key]) => href(key)).map(([key, label]) => (
-            <a
-              key={key}
-              href={href(key)}
-              className={"nav" + (key === current ? " on" : "")}
-              aria-current={key === current ? "page" : undefined}
-            >
-              {page === "home" && key === "home" ? "Brand home" : label}
-              {key === "approvals" && approvals > 0 && (
-                <Chip tone="b">{approvals}</Chip>
-              )}
-            </a>
-          ))}
-          {href("overview") && (
-            <a className="nav" href={href("overview")}>
-              Admin
-            </a>
-          )}
-        </nav>
-        <div className="main">
-          <header className="top">
-            <div style={{ flexGrow: 1 }} />
-            <label className="muted" htmlFor={clientId}>
-              Client
-            </label>
-            <select
-              id={clientId}
-              value={client?.id ?? ""}
-              disabled={!clients.length}
-              onChange={(event) => onClientChange(event.target.value)}
-            >
-              {!clients.length && <option value="">No clients</option>}
-              {clients.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="btn"
-              aria-expanded={showNotifications}
-              onClick={() => setShowNotifications((value) => !value)}
-            >
-              Notifications ·{" "}
-              {notifications.filter((item) => !item.read).length}
-            </button>
-            <div className="workflow-user">
-              <span className="ph">{data.session?.name?.[0] ?? "—"}</span>
-              <div>
-                <strong>
-                  {data.session?.name ?? <a href={href("sign-in")}>Sign in</a>}
-                </strong>
-                <p className="muted">{data.session?.role ?? "—"}</p>
-              </div>
-            </div>
-            {logout}
-          </header>
-          {showNotifications && (
-            <section className="card" aria-label="Notifications">
-              {notifications.length ? (
-                notifications.map((item) => <p key={item.id}>{item.message}</p>)
-              ) : (
-                <p>No notifications.</p>
-              )}
-            </section>
-          )}
-          {children}
-        </div>
-      </div>
-    </div>
+    <AppShell page={page} session={data.session} clients={clients} client={client} onClientChange={onClientChange}
+      href={href} platformHref={platformHref ?? href} brandsHref={brandsHref}
+      approvalsHref={approvalsHref ?? href("approvals")} approvalsCount={approvals}
+      profileHref={profileHref ?? href("profile")} onSignOut={onSignOut}
+      className={page === "home" ? "brand-home-shell" : ""}>
+      {children}
+    </AppShell>
   );
 }
 

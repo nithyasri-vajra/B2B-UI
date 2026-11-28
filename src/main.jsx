@@ -238,6 +238,10 @@ export function B2BAgents({
         logout={logout}
         profileHref={profileHref}
         selectedClientId={client?.id}
+        session={session}
+        brandsHref={brandsAllowed ? workflowHref("my-brands") : undefined}
+        approvalsHref={approvalsHref}
+        onSignOut={signedIn ? () => action("signOut").catch(() => {}) : undefined}
         scopedClients={requireSignIn ? clients : undefined}
         onClientChange={requireSignIn ? onClientChange : undefined}
         canOpen={allowed}
@@ -274,6 +278,10 @@ export function B2BAgents({
         ? clientHref(target, parameters) ?? approvalsHref
         : clientHref(target, parameters)}
       brandsHref={brandsAllowed ? workflowHref("my-brands") : undefined}
+      approvalsHref={approvalsHref}
+      profileHref={profileHref}
+      platformHref={clientHref}
+      onSignOut={signedIn ? () => action("signOut").catch(() => {}) : undefined}
     >
       {detailError && <p role="alert">{detailError}</p>}
       {pageAllowed ? <Screen

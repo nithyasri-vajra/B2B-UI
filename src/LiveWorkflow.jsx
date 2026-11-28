@@ -139,7 +139,7 @@ function PostFeedback({ post, run, review, mayFinalize, canRegenerate, action })
       </div>}
     </>}
     {history.length > 0 && <>
-      <h3>Earlier feedback</h3>
+      <p><strong>Earlier feedback</strong></p>
       <ul>{history.map((entry) => <li key={String(entry._id ?? entry.id)}>
         Version {entry.version - 1} → {entry.version}: {entry.reviewerFeedback}
       </li>)}</ul>
