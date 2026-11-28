@@ -83,7 +83,7 @@ export function canPerformAction(session, clientId, name, run, { separation = fa
   if (name === "saveBrief") return operator || approver;
   if (name === "uploadSources" || name === "saveKnowledgeSetup")
     return admin || roles.includes("brand_manager");
-  if (knowledgeActions.includes(name)) return roles.includes("brand_manager");
+  if (knowledgeActions.includes(name)) return admin || roles.includes("brand_manager");
   if (name === "requestPlanApproval") return ownRun;
   if (name === "approvePlan" || name === "rejectPlan")
     return ownRun || (approver && !owner && run?.requiresApprover === true);

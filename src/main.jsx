@@ -111,7 +111,7 @@ export function B2BAgents({
   const initialPage = brandsAllowed ? "my-brands" : signedIn && requireSignIn && client ? "home" : landing(client?.id);
   const page = route || initialPage || defaultPage;
   const brandAudit = page === "audit" && params.get("scope") === "brand";
-  const knowledgeEditor = !requireSignIn || rolesForClient(session, client?.id).includes("brand_manager");
+  const knowledgeEditor = !requireSignIn || platformAdmin || rolesForClient(session, client?.id).includes("brand_manager");
   const run =
     client &&
     data.runs.find(
@@ -158,8 +158,8 @@ export function B2BAgents({
       String(review.clientId) === targetClient && String(review.projectId) === payload.projectId);
     const livePermissions = {
       addKnowledgeSource: platformAdmin || scopedRole.includes("brand_manager"),
-      createKnowledgeRecord: scopedRole.includes("brand_manager"),
-      reviseKnowledgeRecord: scopedRole.includes("brand_manager"),
+      createKnowledgeRecord: platformAdmin || scopedRole.includes("brand_manager"),
+      reviseKnowledgeRecord: platformAdmin || scopedRole.includes("brand_manager"),
       decideReview: Boolean(assignedReview),
       requestPlanApproval: Boolean(actionRun && scopedRole.some((role) => ["approver", "operator"].includes(role))),
       savePostDraft: Boolean(actionRun && data.posts.some((item) => item.id === payload.postId && item.runId === actionRun.id) &&
